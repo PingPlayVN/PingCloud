@@ -17,6 +17,7 @@ const auth = firebase.auth();
 let isAdmin = false;
 let currentTab = 'video';
 let currentFolderId = null; // null = root
+let currentSortMode = 'date_desc';
 let allData = [];
 let dataMap = {}; // TỐI ƯU: Map để tra cứu nhanh (O(1))
 
@@ -62,16 +63,18 @@ db.ref('videos').on('value', (snapshot) => {
     renderGrid();
 });
 
+function changeSortMode(mode) {
+    currentSortMode = mode;
+    renderGrid();
+}
+
 function renderGrid() {
     const grid = document.getElementById('grid');
-    updateBreadcrumb(); // Cập nhật breadcrumb trước
+    updateBreadcrumb(); 
 
     // 1. Lọc dữ liệu
-    const filtered = allData.filter(item => {
-        // Chỉ lấy item thuộc thư mục hiện tại
+    let filtered = allData.filter(item => {
         if (item.parentId !== currentFolderId) return false;
-
-        // Logic phân loại tab
         if (item.type === 'folder') {
             return item.tabCategory === currentTab; 
         } else {
@@ -79,26 +82,47 @@ function renderGrid() {
         }
     });
 
-    // 2. Sắp xếp (Folder lên đầu)
-    filtered.sort((a, b) => (a.type === 'folder' ? -1 : 1));
+    // 2. SẮP XẾP (LOGIC MỚI)
+    filtered.sort((a, b) => {
+        // Ưu tiên 1: Folder luôn nằm trên cùng
+        if (a.type === 'folder' && b.type !== 'folder') return -1;
+        if (a.type !== 'folder' && b.type === 'folder') return 1;
 
-    // 3. Render HTML (TỐI ƯU: Gom chuỗi)
+        // Ưu tiên 2: Sắp xếp theo lựa chọn
+        const [criteria, order] = currentSortMode.split('_'); // Tách 'date' và 'desc'
+        
+        let valA, valB;
+
+        if (criteria === 'date') {
+            valA = a.timestamp;
+            valB = b.timestamp;
+        } else {
+            // Sắp theo tên (Name)
+            valA = a.title.toLowerCase();
+            valB = b.title.toLowerCase();
+        }
+
+        if (valA < valB) return order === 'asc' ? -1 : 1;
+        if (valA > valB) return order === 'asc' ? 1 : -1;
+        return 0;
+    });
+
+    // 3. Render HTML (Giữ nguyên logic Tối ưu cũ)
     if (filtered.length === 0) {
         grid.innerHTML = `<p style="grid-column:1/-1; text-align:center; color:#999; margin-top:50px;">Thư mục trống</p>`;
         return;
     }
 
-    // TỐI ƯU: Sử dụng map để tạo chuỗi HTML lớn thay vì += innerHTML liên tục
     const htmlBuffer = filtered.map(data => {
         const isFolder = data.type === 'folder';
         
+        // ... (Giữ nguyên toàn bộ logic tạo icon, thumbUrl, cardHtml cũ) ...
         let icon = '▶';
         if (isFolder) icon = '📁';
         else if (data.type === 'image') icon = '📷';
         else if (data.type === 'doc') icon = '📄';
         else if (data.type === 'other') icon = '📦';
 
-        // Tối ưu thumbnail: Chỉ tải khi cần thiết
         const thumbUrl = !isFolder ? `https://drive.google.com/thumbnail?id=${data.id}&sz=w400` : '';
         
         let thumbContent = '';
@@ -118,7 +142,6 @@ function renderGrid() {
                 ${downloadIcon}
             </a>` : '';
 
-        // Play overlay chỉ cho video
         const playOverlay = (!isFolder && data.type === 'video') ? '<div class="play-overlay">▶</div>' : '';
 
         return `
@@ -140,9 +163,9 @@ function renderGrid() {
                 </div>
             </div>
         `;
-    }).join(''); // Nối tất cả thành 1 chuỗi
+    }).join('');
 
-    grid.innerHTML = htmlBuffer; // Chỉ vẽ lại DOM 1 lần duy nhất
+    grid.innerHTML = htmlBuffer;
 }
 
 // --- NAVIGATION (TỐI ƯU) ---

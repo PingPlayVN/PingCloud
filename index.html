@@ -26,8 +26,17 @@
             <div class="tab-btn" onclick="switchTab('doc')" id="tab-doc">Tài liệu</div>
             <div class="tab-btn" onclick="switchTab('other')" id="tab-other">File khác</div>
         </div>
-        
-        <button id="btnNew" class="btn-header" onclick="toggleAdminTool()" style="display:none; background: var(--primary); color: white; border:none; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">+ Thêm tệp</button>
+
+        <div class="tools-right" style="display:flex; gap:10px; align-items:center;">
+            <select id="sortSelect" onchange="changeSortMode(this.value)" class="sort-select">
+                <option value="date_desc">📅 Mới nhất</option>
+                <option value="date_asc">📅 Cũ nhất</option>
+                <option value="name_asc">🔤 Tên (A-Z)</option>
+                <option value="name_desc">🔤 Tên (Z-A)</option>
+            </select>
+            
+            <button id="btnNew" class="btn-header" onclick="toggleAdminTool()" style="display:none; background: var(--primary); color: white; border:none; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">+ Thêm</button>
+        </div>
     </div>
 
     <div class="breadcrumb" id="breadcrumb">
