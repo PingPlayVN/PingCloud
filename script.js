@@ -18,12 +18,40 @@ let isAdmin = false;
 let currentTab = 'video';
 let currentFolderId = null; // null = root
 let currentSortMode = 'date_desc';
+let currentSearchTerm = ''; // MỚI: Từ khóa tìm kiếm
 let allData = [];
-let dataMap = {}; // TỐI ƯU: Map để tra cứu nhanh (O(1))
+let dataMap = {}; 
 
 // Clipboard nội bộ
 let appClipboard = { action: null, id: null };
 let contextTargetId = null;
+
+// --- THEME / DARK MODE (MỚI) ---
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        document.getElementById('themeBtn').innerText = '☀️'; // Icon mặt trời
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        document.getElementById('themeBtn').innerText = '🌙'; // Icon mặt trăng
+    }
+}
+// Chạy ngay khi load
+initTheme();
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    if (current === 'dark') {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('theme', 'light');
+        document.getElementById('themeBtn').innerText = '🌙';
+    } else {
+        document.documentElement.setAttribute('data-theme', 'dark');
+        localStorage.setItem('theme', 'dark');
+        document.getElementById('themeBtn').innerText = '☀️';
+    }
+}
 
 // --- AUTH LISTENER ---
 auth.onAuthStateChanged((user) => {
@@ -47,10 +75,10 @@ auth.onAuthStateChanged((user) => {
     }
 });
 
-// --- INIT & RENDER (TỐI ƯU) ---
+// --- INIT & RENDER ---
 db.ref('videos').on('value', (snapshot) => {
     allData = [];
-    dataMap = {}; // Reset map
+    dataMap = {}; 
     
     snapshot.forEach(child => {
         const val = child.val();
@@ -58,7 +86,7 @@ db.ref('videos').on('value', (snapshot) => {
         
         const item = { key: child.key, ...val };
         allData.push(item);
-        dataMap[child.key] = item; // TỐI ƯU: Lưu vào map để tra cứu sau này
+        dataMap[child.key] = item; 
     });
     renderGrid();
 });
@@ -68,38 +96,47 @@ function changeSortMode(mode) {
     renderGrid();
 }
 
+// Hàm xử lý tìm kiếm (MỚI)
+function handleSearch(val) {
+    currentSearchTerm = val.toLowerCase().trim();
+    renderGrid();
+}
+
 function renderGrid() {
     const grid = document.getElementById('grid');
     updateBreadcrumb(); 
 
-    // 1. Lọc dữ liệu
+    // 1. Lọc dữ liệu (Đã thêm Search)
     let filtered = allData.filter(item => {
+        // Lọc theo thư mục
         if (item.parentId !== currentFolderId) return false;
-        if (item.type === 'folder') {
-            return item.tabCategory === currentTab; 
-        } else {
-            return item.type === currentTab;
+        
+        // Lọc theo Tab
+        let tabMatch = (item.type === 'folder') 
+            ? (item.tabCategory === currentTab) 
+            : (item.type === currentTab);
+        if (!tabMatch) return false;
+
+        // Lọc theo Tìm kiếm (MỚI)
+        if (currentSearchTerm && !item.title.toLowerCase().includes(currentSearchTerm)) {
+            return false;
         }
+
+        return true;
     });
 
-    // 2. SẮP XẾP (LOGIC MỚI)
+    // 2. SẮP XẾP
     filtered.sort((a, b) => {
-        // Ưu tiên 1: Folder luôn nằm trên cùng
         if (a.type === 'folder' && b.type !== 'folder') return -1;
         if (a.type !== 'folder' && b.type === 'folder') return 1;
 
-        // Ưu tiên 2: Sắp xếp theo lựa chọn
-        const [criteria, order] = currentSortMode.split('_'); // Tách 'date' và 'desc'
+        const [criteria, order] = currentSortMode.split('_'); 
         
         let valA, valB;
-
         if (criteria === 'date') {
-            valA = a.timestamp;
-            valB = b.timestamp;
+            valA = a.timestamp; valB = b.timestamp;
         } else {
-            // Sắp theo tên (Name)
-            valA = a.title.toLowerCase();
-            valB = b.title.toLowerCase();
+            valA = a.title.toLowerCase(); valB = b.title.toLowerCase();
         }
 
         if (valA < valB) return order === 'asc' ? -1 : 1;
@@ -107,16 +144,16 @@ function renderGrid() {
         return 0;
     });
 
-    // 3. Render HTML (Giữ nguyên logic Tối ưu cũ)
+    // 3. Render HTML
     if (filtered.length === 0) {
-        grid.innerHTML = `<p style="grid-column:1/-1; text-align:center; color:#999; margin-top:50px;">Thư mục trống</p>`;
+        let msg = currentSearchTerm ? `Không tìm thấy "${currentSearchTerm}"` : "Thư mục trống";
+        grid.innerHTML = `<p style="grid-column:1/-1; text-align:center; color:var(--text-sub); margin-top:50px;">${msg}</p>`;
         return;
     }
 
     const htmlBuffer = filtered.map(data => {
         const isFolder = data.type === 'folder';
         
-        // ... (Giữ nguyên toàn bộ logic tạo icon, thumbUrl, cardHtml cũ) ...
         let icon = '▶';
         if (isFolder) icon = '📁';
         else if (data.type === 'image') icon = '📷';
@@ -168,13 +205,14 @@ function renderGrid() {
     grid.innerHTML = htmlBuffer;
 }
 
-// --- NAVIGATION (TỐI ƯU) ---
+// --- NAVIGATION ---
 function switchTab(type) {
-    if (currentTab === type) return; // Không làm gì nếu bấm lại tab cũ
+    if (currentTab === type) return; 
     currentTab = type;
     currentFolderId = null; 
+    currentSearchTerm = ''; // Reset tìm kiếm khi chuyển tab
+    document.getElementById('searchInput').value = '';
     
-    // Tối ưu selector
     const activeBtn = document.querySelector('.tab-btn.active');
     if(activeBtn) activeBtn.classList.remove('active');
     document.getElementById(`tab-${type}`).classList.add('active');
@@ -185,6 +223,8 @@ function switchTab(type) {
 function handleClick(key, type, driveId) {
     if (type === 'folder') {
         currentFolderId = key;
+        currentSearchTerm = ''; // Reset tìm kiếm khi vào folder mới
+        document.getElementById('searchInput').value = '';
         renderGrid();
     } else {
         openMedia(driveId, type);
@@ -193,6 +233,8 @@ function handleClick(key, type, driveId) {
 
 function navigateTo(targetId) {
     currentFolderId = (targetId === 'root') ? null : targetId;
+    currentSearchTerm = ''; // Reset tìm kiếm
+    document.getElementById('searchInput').value = '';
     renderGrid();
 }
 
@@ -202,18 +244,14 @@ function updateBreadcrumb() {
     
     if (currentFolderId) {
         let path = [];
-        // TỐI ƯU: Sử dụng dataMap để tra cứu (O(1)) thay vì .find (O(n))
         let curr = dataMap[currentFolderId];
-        
-        // Giới hạn độ sâu để tránh treo nếu dữ liệu lỗi vòng lặp
         let safetyCounter = 0;
         while(curr && safetyCounter < 50) {
             path.unshift(curr);
             if (!curr.parentId) break;
-            curr = dataMap[curr.parentId]; // Tra cứu nhanh
+            curr = dataMap[curr.parentId]; 
             safetyCounter++;
         }
-
         path.forEach(folder => {
             html += ` <span class="crumb-separator">/</span> <span class="crumb-item" onclick="navigateTo('${folder.key}')">${folder.title}</span>`;
         });
@@ -227,7 +265,6 @@ const contextMenu = document.getElementById('contextMenu');
 document.addEventListener('contextmenu', function(e) {
     if (e.target.closest('.container')) {
         e.preventDefault();
-        // Chỉ hiện menu bg nếu KHÔNG click vào card
         if (!e.target.closest('.card')) {
             showContextMenu(e, null, false);
         }
@@ -241,17 +278,13 @@ document.addEventListener('click', () => {
 function showContextMenu(e, key, isItem) {
     e.preventDefault();
     e.stopPropagation(); 
-    
     contextTargetId = key; 
 
-    // Giữ menu trong màn hình
     let top = e.clientY;
     let left = e.clientX;
-    
-    contextMenu.style.display = 'block'; // Hiển thị trước để tính toán kích thước
+    contextMenu.style.display = 'block'; 
     if (left + contextMenu.offsetWidth > window.innerWidth) left = window.innerWidth - contextMenu.offsetWidth - 10;
     if (top + contextMenu.offsetHeight > window.innerHeight) top = window.innerHeight - contextMenu.offsetHeight - 10;
-
     contextMenu.style.top = `${top}px`;
     contextMenu.style.left = `${left}px`;
 
@@ -304,10 +337,8 @@ function closeActionModal() {
 }
 
 // --- ACTION HANDLERS ---
-
 function createFolderUI() {
     if (!isAdmin) { showActionModal({ title: "Thông báo", desc: "Cần quyền Admin!", type: 'alert' }); return; }
-    
     showActionModal({
         title: "Tạo thư mục mới",
         type: 'prompt',
@@ -326,11 +357,8 @@ function createFolderUI() {
 
 function renameItemUI() {
     if (!isAdmin) { showActionModal({ title: "Thông báo", desc: "Cần quyền Admin!", type: 'alert' }); return; }
-    
-    // Tối ưu: Lấy từ dataMap nhanh hơn
     const item = dataMap[contextTargetId];
     if (!item) return;
-
     showActionModal({
         title: "Đổi tên tệp",
         type: 'prompt',
@@ -345,7 +373,6 @@ function renameItemUI() {
 
 function deleteItem() {
     if (!isAdmin) { showActionModal({ title: "Thông báo", desc: "Cần quyền Admin!", type: 'alert' }); return; }
-    
     showActionModal({
         title: "Xóa mục này?",
         desc: "Hành động này không thể hoàn tác.",
@@ -371,12 +398,10 @@ function cutItem() {
 function pasteItem() {
     if (!isAdmin) { showToast("Cần quyền Admin!"); return; }
     if (!appClipboard.id) { showToast("Chưa có gì để dán!"); return; }
-
     if (appClipboard.id === currentFolderId) {
         showActionModal({ title: "Lỗi", desc: "Không thể dán vào chính nó!", type: 'alert' });
         return;
     }
-
     const sourceItem = dataMap[appClipboard.id];
     if (!sourceItem) return;
 
@@ -384,7 +409,6 @@ function pasteItem() {
         parentId: currentFolderId,
         timestamp: firebase.database.ServerValue.TIMESTAMP
     };
-
     if (sourceItem.type === 'folder') updates.tabCategory = currentTab;
     else updates.type = currentTab;
 
@@ -394,7 +418,6 @@ function pasteItem() {
                 showToast("Đã di chuyển");
                 appClipboard = { action: null, id: null }; 
             });
-
     } else if (appClipboard.action === 'copy') {
         const newItem = { ...sourceItem, ...updates, title: sourceItem.title + " (Copy)" };
         delete newItem.key; 
@@ -442,7 +465,6 @@ function addToCloud() {
     const url = document.getElementById('mediaUrl').value;
     const id = extractFileId(url);
     const title = document.getElementById('mediaTitle').value || ("File " + id?.substring(0,5));
-    
     if (id) {
         db.ref('videos').push({
             id: id, title: title, type: currentTab, 
@@ -462,11 +484,8 @@ function addToCloud() {
 function openMedia(id, type) {
     const modal = document.getElementById('mediaModal');
     const content = document.getElementById('modalContent');
-    
     content.innerHTML = '<div class="loader"></div>';
     modal.style.display = 'flex';
-
-    // Tối ưu: Dùng requestAnimationFrame để mượt mà hơn
     requestAnimationFrame(() => {
         let html = `<span class="close-modal" onclick="closeMedia(event, true)">&times;</span>`;
         if (type === 'image') {

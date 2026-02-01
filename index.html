@@ -15,8 +15,13 @@
             <svg class="logo-icon" viewBox="0 0 87.3 78" xmlns="http://www.w3.org/2000/svg"><path d="m6.6 66.85 25.3-43.2h50l-25.3 43.2z" fill="#0066da"/><path d="m0 0 25.3 43.2h-25.3z" fill="#00ac47"/><path d="m31.9 0-25.3 43.2-6.6-11.4 19.3-31.8z" fill="#ea4335"/><path d="m0 0h50l6.6 11.4h-56.6z" fill="#ffba00"/><path d="m31.9 0h55.4l-19.3 33h-55.4z" fill="#2684fc"/><path d="m87.3 33-25.3 43.2h-13.2l25.3-43.2z" fill="#00ac47"/></svg>
             <h2>Wind Cloud</h2>
         </div>
-        <button id="loginBtn" class="btn-header" onclick="showLogin()">Admin Access</button>
-        <button id="logoutBtn" class="btn-header" onclick="logout()" style="display:none; color: var(--danger); border-color:transparent">Thoát</button>
+        
+        <div style="display:flex; align-items:center; gap:10px;">
+            <button id="themeBtn" class="btn-header icon-btn" onclick="toggleTheme()" title="Chế độ tối">🌙</button>
+            
+            <button id="loginBtn" class="btn-header" onclick="showLogin()">Admin Access</button>
+            <button id="logoutBtn" class="btn-header" onclick="logout()" style="display:none; color: var(--danger); border-color:transparent">Thoát</button>
+        </div>
     </header>
 
     <div class="toolbar">
@@ -28,6 +33,10 @@
         </div>
 
         <div class="tools-right" style="display:flex; gap:10px; align-items:center;">
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="🔍 Tìm kiếm..." oninput="handleSearch(this.value)">
+            </div>
+
             <select id="sortSelect" onchange="changeSortMode(this.value)" class="sort-select">
                 <option value="date_desc">📅 Mới nhất</option>
                 <option value="date_asc">📅 Cũ nhất</option>
@@ -91,7 +100,6 @@
     <p id="loginError" style="color:var(--danger); font-size:13px; margin-top:10px; display:none;"></p>
 </div>
 
-
 <div id="toast">Đã sao chép vào bộ nhớ tạm</div>
 
 <div id="actionModal" class="custom-modal-overlay">
@@ -111,7 +119,6 @@
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
 <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
-
 <script src="script.js"></script>
 
 </body>
