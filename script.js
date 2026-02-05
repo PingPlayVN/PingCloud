@@ -142,13 +142,17 @@ auth.onAuthStateChanged((user) => {
     if (user) {
         isAdmin = true;
         btnNew.style.display = 'block';
+        
         loginBtn.style.display = 'none';
-        logoutBtn.style.display = 'block';
+        // Dùng 'flex' để icon và chữ thẳng hàng trong Sidebar
+        logoutBtn.style.display = 'flex'; 
     } else {
         isAdmin = false;
         btnNew.style.display = 'none';
         adminTool.style.display = 'none';
-        loginBtn.style.display = 'block';
+        
+        // Dùng 'flex' để icon và chữ thẳng hàng trong Sidebar
+        loginBtn.style.display = 'flex';
         logoutBtn.style.display = 'none';
     }
 });
@@ -787,6 +791,8 @@ function addToCloud() {
 
 // --- AUTH FNS ---
 function showLogin() {
+    document.getElementById('main-sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('open');
     document.getElementById('overlay').style.display = 'block';
     // Đảm bảo dùng 'flex' để ăn theo thuộc tính justify/align trong CSS
     const panel = document.getElementById('login-panel');
