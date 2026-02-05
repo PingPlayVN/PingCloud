@@ -831,3 +831,199 @@ function loginAdmin() {
 function logout() {
     auth.signOut().then(() => showToast("Đã đăng xuất"));
 }
+
+// ==============================================
+// --- SYSTEM: APP SWITCHER & SIDEBAR ---
+// ==============================================
+
+function toggleSidebar() {
+    const sidebar = document.getElementById('main-sidebar');
+    const overlay = document.getElementById('sidebar-overlay');
+    sidebar.classList.toggle('open');
+    overlay.classList.toggle('open');
+}
+
+function switchApp(appName) {
+    // 1. Đóng sidebar
+    toggleSidebar();
+
+    // 2. Cập nhật UI Menu Active
+    document.querySelectorAll('.menu-item').forEach(item => item.classList.remove('active'));
+    if(appName === 'cloud') document.querySelector('.menu-item:nth-child(1)').classList.add('active');
+    else document.querySelector('.menu-item:nth-child(2)').classList.add('active');
+
+    // 3. Chuyển đổi màn hình
+    const appCloud = document.getElementById('app-cloud');
+    const appPalette = document.getElementById('app-palette');
+
+    if (appName === 'cloud') {
+        appCloud.style.display = 'block';
+        appPalette.style.display = 'none';
+        document.title = "Wind Cloud - Storage";
+    } else {
+        appCloud.style.display = 'none';
+        appPalette.style.display = 'block';
+        document.title = "Wind Cloud - Color Studio";
+        
+        // SỬA LỖI 1: Gọi đúng hàm updatePaletteSystem thay vì generatePalette
+        if (document.getElementById('paletteGrid').innerHTML.trim() === '') {
+            updatePaletteSystem();
+        }
+    }
+}
+
+// ==============================================
+// --- APP: COLOR STUDIO PRO LOGIC ---
+// ==============================================
+
+function updatePaletteSystem() {
+    const baseHex = document.getElementById('baseColorInput').value;
+    const rule = document.getElementById('harmonyRule').value;
+    
+    // Cập nhật text hiển thị mã màu gốc
+    document.getElementById('baseColorHex').innerText = baseHex.toUpperCase();
+    
+    const hsl = hexToHSL(baseHex); 
+    
+    let palette = [];
+
+    // TÍNH TOÁN CÁC MÀU
+    switch(rule) {
+        case 'analogous': 
+            palette = [shiftHue(hsl, -30), shiftHue(hsl, -15), hsl, shiftHue(hsl, 15), shiftHue(hsl, 30)];
+            break;
+        case 'monochromatic': 
+            palette = [
+                [hsl[0], hsl[1], Math.max(10, hsl[2] - 30)],
+                [hsl[0], hsl[1], Math.max(20, hsl[2] - 15)],
+                hsl,
+                [hsl[0], Math.max(20, hsl[1] - 30), Math.min(90, hsl[2] + 20)],
+                [hsl[0], hsl[1], Math.min(95, hsl[2] + 40)]
+            ];
+            break;
+        case 'complementary': 
+            palette = [hsl, shiftHue(hsl, 180), [hsl[0], Math.max(10, hsl[1]-20), Math.min(90, hsl[2]+30)], [shiftHue(hsl, 180)[0], hsl[1], Math.max(20, hsl[2]-30)], [hsl[0], hsl[1], 95]];
+            break;
+        case 'split-complementary': 
+            palette = [hsl, shiftHue(hsl, 150), shiftHue(hsl, 210), [hsl[0], 30, 90], [hsl[0], 20, 20]];
+            break;
+        case 'triadic': 
+            palette = [hsl, shiftHue(hsl, 120), shiftHue(hsl, 240), [shiftHue(hsl, 120)[0], 50, 80], [shiftHue(hsl, 240)[0], 50, 80]];
+            break;
+        case 'tetradic': 
+            palette = [hsl, shiftHue(hsl, 180), shiftHue(hsl, 60), shiftHue(hsl, 240), [hsl[0], 10, 90]];
+            break;
+        default:
+            palette = [hsl, hsl, hsl, hsl, hsl];
+    }
+
+    renderPalette(palette);
+}
+
+function renderPalette(hslArray) {
+    const grid = document.getElementById('paletteGrid');
+    grid.innerHTML = '';
+    
+    window.currentPaletteHex = [];
+
+    hslArray.forEach((hsl, index) => {
+        const hex = HSLToHex(hsl[0], hsl[1], hsl[2]);
+        window.currentPaletteHex.push(hex);
+
+        const strip = document.createElement('div');
+        strip.className = 'color-strip';
+        strip.style.backgroundColor = hex;
+        // SỬA LỖI 2: Hàm copyColor đã được định nghĩa bên dưới
+        strip.onclick = () => copyColor(hex);
+        
+        let name = index === 2 && hslArray.length === 5 ? "Base" : `Color ${index+1}`;
+        if (document.getElementById('harmonyRule').value === 'monochromatic') name = `Lightness ${Math.round(hsl[2])}%`;
+
+        strip.innerHTML = `
+            <div class="strip-info">
+                <span class="strip-hex">${hex}</span>
+                <span class="strip-name">${name}</span>
+            </div>
+        `;
+        grid.appendChild(strip);
+    });
+}
+
+// --- HELPER FUNCTIONS ---
+
+// SỬA LỖI 2: Thêm lại hàm copyColor bị thiếu
+function copyColor(hex) {
+    navigator.clipboard.writeText(hex).then(() => {
+        showToast(`Đã copy màu: ${hex} 📋`);
+    });
+}
+
+function shiftHue(hsl, degree) {
+    let newHue = (hsl[0] + degree) % 360;
+    if (newHue < 0) newHue += 360;
+    return [newHue, hsl[1], hsl[2]];
+}
+
+function hexToHSL(H) {
+    let r = 0, g = 0, b = 0;
+    if (H.length == 4) {
+        r = "0x" + H[1] + H[1]; g = "0x" + H[2] + H[2]; b = "0x" + H[3] + H[3];
+    } else if (H.length == 7) {
+        r = "0x" + H[1] + H[2]; g = "0x" + H[3] + H[4]; b = "0x" + H[5] + H[6];
+    }
+    r /= 255; g /= 255; b /= 255;
+    let cmin = Math.min(r,g,b), cmax = Math.max(r,g,b), delta = cmax - cmin;
+    let h = 0, s = 0, l = 0;
+
+    if (delta == 0) h = 0;
+    else if (cmax == r) h = ((g - b) / delta) % 6;
+    else if (cmax == g) h = (b - r) / delta + 2;
+    else h = (r - g) / delta + 4;
+
+    h = Math.round(h * 60);
+    if (h < 0) h += 360;
+    l = (cmax + cmin) / 2;
+    s = delta == 0 ? 0 : delta / (1 - Math.abs(2 * l - 1));
+    s = +(s * 100).toFixed(1);
+    l = +(l * 100).toFixed(1);
+    return [h, s, l];
+}
+
+function HSLToHex(h, s, l) {
+    s /= 100; l /= 100;
+    let c = (1 - Math.abs(2 * l - 1)) * s,
+        x = c * (1 - Math.abs(((h / 60) % 2) - 1)),
+        m = l - c / 2,
+        r = 0, g = 0, b = 0;
+
+    if (0 <= h && h < 60) { r = c; g = x; b = 0; }
+    else if (60 <= h && h < 120) { r = x; g = c; b = 0; }
+    else if (120 <= h && h < 180) { r = 0; g = c; b = x; }
+    else if (180 <= h && h < 240) { r = 0; g = x; b = c; }
+    else if (240 <= h && h < 300) { r = x; g = 0; b = c; }
+    else if (300 <= h && h < 360) { r = c; g = 0; b = x; }
+    
+    r = Math.round((r + m) * 255).toString(16);
+    g = Math.round((g + m) * 255).toString(16);
+    b = Math.round((b + m) * 255).toString(16);
+
+    if (r.length == 1) r = "0" + r;
+    if (g.length == 1) g = "0" + g;
+    if (b.length == 1) b = "0" + b;
+    return "#" + r + g + b;
+}
+
+function randomBaseColor() {
+    const randomHex = '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0');
+    document.getElementById('baseColorInput').value = randomHex;
+    updatePaletteSystem();
+}
+
+function exportPalette() {
+    if (window.currentPaletteHex) {
+        const text = window.currentPaletteHex.join(', ');
+        navigator.clipboard.writeText(text).then(() => {
+            showToast("Đã copy toàn bộ mã màu! 📋");
+        });
+    }
+}
