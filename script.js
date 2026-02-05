@@ -1067,7 +1067,7 @@ let incomingChunks = []; // Mảng chứa các mảnh file nhận được
 let receivedSize = 0; // Dung lượng đã nhận
 
 // Cấu hình Chunk (Mảnh file): 64KB là mức an toàn cho WebRTC/PeerJS để không bị nghẽn
-const CHUNK_SIZE = 64 * 1024; 
+const CHUNK_SIZE = 256 * 1024; 
 
 if (!myPeerId) {
     myPeerId = 'wind_' + Math.floor(Math.random() * 9000 + 1000); 
@@ -1428,4 +1428,5 @@ function setupDragDrop(element, targetId) {
         };
         input.click();
     };
+
 }
