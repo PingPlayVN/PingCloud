@@ -1243,40 +1243,48 @@ function uploadFileP2P(file, targetPeerId) {
     });
 }
 
-// Hàm cắt file và gửi (Phiên bản Ổn định PC-to-PC)
+// Hàm cắt file và gửi (Phiên bản Tối ưu 4 Kịch bản - Đỉnh cao Tốc độ)
 async function sendFileInChunks(file, conn, receiverType) {
     let offset = 0;
-    const CHUNK_SIZE = 64 * 1024; // 64KB chuẩn vàng
+    const CHUNK_SIZE = 64 * 1024; // 64KB chuẩn vàng của WebRTC
     let chunkCounter = 0; 
     let lastUpdateTime = 0;
 
-    // --- CẤU HÌNH TỐC ĐỘ (ĐÃ TINH CHỈNH) ---
+    // --- CẤU HÌNH TỐC ĐỘ (4 KỊCH BẢN RIÊNG BIỆT) ---
     let maxBufferThreshold; 
     let throttleInterval;   
     let sleepTime;          
 
-    if (myDeviceType === 'pc' && receiverType === 'pc') {
-        // [SCENARIO 1: PC -> PC] (Đã Fix lỗi mất kết nối)
-        // Giảm bộ đệm xuống 8MB (thay vì 16MB) để tránh sốc mạng
-        maxBufferThreshold = 8 * 1024 * 1024; 
-        
-        // [QUAN TRỌNG] Không được để = 0. Phải cho nghỉ để duy trì kết nối.
-        // Cứ gửi 100 gói (6.4MB) thì nghỉ 1ms. 
-        // 1ms không làm chậm tốc độ nhưng đủ để CPU xử lý tín hiệu ngầm.
-        throttleInterval = 100; 
-        sleepTime = 1;
+    // 1. NGƯỜI GỬI LÀ PC 💻
+    if (myDeviceType === 'pc') {
+        if (receiverType === 'pc') {
+            // [PC -> PC] Tốc độ bàn thờ (Max Speed)
+            maxBufferThreshold = 8 * 1024 * 1024; // 8MB
+            throttleInterval = 100; // 6.4MB nghỉ 1 lần
+            sleepTime = 1;          // Nghỉ 1ms lấy hơi
+        } else {
+            // [PC -> Mobile] Giữ an toàn cho điện thoại nhận
+            maxBufferThreshold = 2 * 1024 * 1024; // 2MB
+            throttleInterval = 10;  
+            sleepTime = 20;         // Nghỉ nhiều để Mobile kịp nuốt
+        }
     } 
-    else if (myDeviceType === 'pc' && receiverType === 'mobile') {
-        // [SCENARIO 2: PC -> Mobile] Chậm lại để bảo vệ điện thoại
-        maxBufferThreshold = 2 * 1024 * 1024; 
-        throttleInterval = 10; // 10 gói...
-        sleepTime = 20;        // ...nghỉ 20ms
-    } 
+    // 2. NGƯỜI GỬI LÀ MOBILE 📱
     else {
-        // [SCENARIO 3: Mobile -> Mobile / Mobile -> PC]
-        maxBufferThreshold = 4 * 1024 * 1024; 
-        throttleInterval = 50; 
-        sleepTime = 5;         
+        if (receiverType === 'pc') {
+            // [Mobile -> PC] Xả hết ga (Vì PC nhận rất khỏe)
+            // Mobile không cần lo PC bị ngộp, chỉ cần lo CPU mình chạy kịp không
+            maxBufferThreshold = 8 * 1024 * 1024; // 8MB
+            throttleInterval = 200; // Gửi liên tục 12MB mới nghỉ
+            sleepTime = 1;          // Nghỉ cực ngắn
+        } else {
+            // [Mobile -> Mobile] (Đã Tăng Tốc 🔥)
+            // Cấu hình cũ: 4MB - 50 gói - nghỉ 5ms
+            // Cấu hình mới: 6MB - 100 gói - nghỉ 2ms
+            maxBufferThreshold = 6 * 1024 * 1024; // Tăng bộ đệm lên 6MB
+            throttleInterval = 100; // Gửi gấp đôi lượng gói tin mới nghỉ
+            sleepTime = 2;          // Giảm thời gian nghỉ xuống
+        }
     }
 
     const readSlice = (start, end) => {
@@ -1293,9 +1301,9 @@ async function sendFileInChunks(file, conn, receiverType) {
             if (!isTransferring) break;
             if (!conn || !conn.open) throw new Error("Mất kết nối!");
 
-            // 1. BACKPRESSURE: Kiểm tra "ống nước"
+            // 1. BACKPRESSURE: Kiểm tra xem ống nước có bị tắc không
             if (conn.dataChannel.bufferedAmount > maxBufferThreshold) {
-                 await new Promise(r => setTimeout(r, 5)); // Đợi ngắn hơn chút (5ms)
+                 await new Promise(r => setTimeout(r, 5)); // Đợi xả bớt
                  continue;
             }
 
@@ -1305,20 +1313,20 @@ async function sendFileInChunks(file, conn, receiverType) {
             try {
                 conn.send({ type: 'chunk', data: arrayBuffer });
             } catch (e) {
-                console.warn("Lỗi gửi gói tin, đang thử lại...", e);
-                await new Promise(r => setTimeout(r, 100)); // Đợi xíu rồi thử lại vòng sau
+                console.warn("Thử gửi lại gói tin...", e);
+                await new Promise(r => setTimeout(r, 50));
                 continue; 
             }
 
             offset = end;
             chunkCounter++;
             
-            // 2. THROTTLING CHỦ ĐỘNG (Bắt buộc cho mọi thiết bị)
+            // 2. THROTTLING CHỦ ĐỘNG
             if (throttleInterval > 0 && chunkCounter % throttleInterval === 0) {
                 await new Promise(r => setTimeout(r, sleepTime)); 
             }
 
-            // 3. UI UPDATE (Throttle update để giảm tải CPU)
+            // 3. UI UPDATE (Giữ nguyên 100ms để mượt)
             const now = Date.now();
             if (now - lastUpdateTime > 100 || offset === file.size) {
                 const percent = (offset / file.size) * 100;
