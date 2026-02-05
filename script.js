@@ -1418,7 +1418,7 @@ function updateTransferUI(percent, statusText) {
 }
 
 
-// --- GIỮ NGUYÊN PHẦN UI CŨ (RENDER PEERS) ---
+// --- RENDER UI VỚI TỌA ĐỘ ĐỘNG (RESPONSIVE) ---
 function renderPeers(users) {
     const orbitZone = document.getElementById('user-orbit-zone');
     orbitZone.innerHTML = '';
@@ -1426,22 +1426,37 @@ function renderPeers(users) {
     if (!users) return;
 
     const userList = Object.keys(users).filter(id => id !== myPeerId); 
-    document.getElementById('dropStatus').innerText = `Radar: ${userList.length} thiết bị (ID: ${myPeerId.split('_')[1]})`;
+    document.getElementById('dropStatus').innerText = `Đang quét: ${userList.length} thiết bị khả dụng`;
+
+    // Lấy kích thước thực tế của vùng Radar
+    const radarContainer = document.querySelector('.radar-zone');
+    const containerWidth = radarContainer.clientWidth;
+    const containerHeight = radarContainer.clientHeight;
+    
+    // Bán kính quỹ đạo = 40% chiều rộng radar (để icon nằm lọt bên trong)
+    const orbitRadius = containerWidth * 0.32; 
+    const centerX = containerWidth / 2;
+    const centerY = containerHeight / 2;
 
     userList.forEach((userId, index) => {
         const user = users[userId];
         const el = document.createElement('div');
         el.className = 'peer-user';
         
+        // Tính góc chia đều cho các user (Hình tròn)
         const angle = (index / userList.length) * 2 * Math.PI;
-        const radius = 120;
-        const x = Math.cos(angle) * radius + 145; 
-        const y = Math.sin(angle) * radius + 145;
+        
+        // Tính tọa độ (dùng tâm radar làm gốc)
+        const x = Math.cos(angle) * orbitRadius + centerX;
+        const y = Math.sin(angle) * orbitRadius + centerY;
         
         el.style.left = x + 'px';
         el.style.top = y + 'px';
 
         el.innerHTML = `<div class="peer-icon">👤</div><span>${user.name}</span>`;
+
+        // Animation xuất hiện
+        el.style.animation = `popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) ${index * 0.1}s backwards`;
 
         // Truyền userId vào hàm gửi
         setupDragDrop(el, userId);

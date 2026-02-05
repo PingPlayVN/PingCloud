@@ -1215,242 +1215,188 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; bo
 }
 
 /* ========================================= */
-/* --- APP: WIND DROP (ĐÃ SỬA LỖI UI) --- */
+/* --- APP: WIND DROP (MODERN UI 2.0) --- */
 /* ========================================= */
 
 .drop-container {
-    max-width: 800px; margin: 0 auto; padding: 20px;
+    width: 100%; max-width: 900px; 
+    margin: 0 auto; padding: 20px;
     display: flex; flex-direction: column; align-items: center;
     animation: fadeIn 0.5s;
+    min-height: 70vh; justify-content: center; /* Căn giữa dọc màn hình */
 }
 
-.drop-header { text-align: center; margin-bottom: 40px; }
-.drop-header h1 { margin-bottom: 5px; color: var(--primary); }
+.drop-header { text-align: center; margin-bottom: 40px; position: relative; z-index: 2; }
+.drop-header h1 { 
+    margin-bottom: 8px; color: var(--primary); 
+    font-size: 2.5rem; letter-spacing: -1px;
+    text-shadow: 0 4px 20px rgba(26, 115, 232, 0.3);
+}
+.drop-header p { font-size: 16px; opacity: 0.8; }
 
-/* --- KHU VỰC RADAR (Sửa lại toàn bộ vị trí) --- */
+/* --- RADAR ZONE (RESPONSIVE) --- */
 .radar-zone {
-    width: 350px; height: 350px;
-    position: relative; /* Làm mốc tọa độ */
-    /* Đã xóa flexbox để tránh xung đột vị trí */
-    margin: 0 auto 30px auto; /* Căn giữa radar zone */
+    /* Kích thước linh hoạt theo màn hình */
+    width: 400px; height: 400px;
+    position: relative;
+    margin: 0 auto 40px auto;
+    border-radius: 50%;
+    /* Hiệu ứng nền tỏa sáng nhẹ */
+    background: radial-gradient(circle, rgba(26, 115, 232, 0.05) 0%, rgba(0,0,0,0) 70%);
 }
 
 /* Nút trung tâm "Bạn" */
 .my-device-center {
-    width: 80px; height: 80px; background: var(--primary);
+    width: 90px; height: 90px; 
+    background: var(--primary);
     border-radius: 50%; z-index: 10;
     display: flex; align-items: center; justify-content: center;
-    color: white; font-weight: bold;
-    box-shadow: 0 0 20px rgba(26, 115, 232, 0.5);
+    color: white; font-weight: 700; font-size: 16px;
+    box-shadow: 0 0 0 8px rgba(26, 115, 232, 0.2), 0 0 30px rgba(26, 115, 232, 0.4);
     
-    /* SỬA: Dùng absolute + transform để căn giữa tuyệt đối */
     position: absolute;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
+.my-device-center:hover { transform: translate(-50%, -50%) scale(1.1); cursor: default; }
 
-/* Các vòng tròn sóng radar */
+/* Các vòng sóng radar */
 .radar-circle {
     position: absolute; border-radius: 50%;
-    border: 1px solid var(--primary);
+    border: 2px solid var(--primary);
     opacity: 0;
-    /* SỬA: Căn giữa tuyệt đối */
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    animation: radarPulse 4s infinite linear;
+    animation: radarWave 4s infinite linear;
+    pointer-events: none;
 }
 .c1 { animation-delay: 0s; }
 .c2 { animation-delay: 1.3s; }
 .c3 { animation-delay: 2.6s; }
 
-@keyframes radarPulse {
-    0% { width: 80px; height: 80px; opacity: 0.8; border-width: 2px; }
-    100% { width: 350px; height: 350px; opacity: 0; border-width: 0px; }
+@keyframes radarWave {
+    0% { width: 90px; height: 90px; opacity: 0.6; border-width: 3px; }
+    100% { width: 100%; height: 100%; opacity: 0; border-width: 0px; }
 }
 
-/* --- KHU VỰC NGƯỜI DÙNG KHÁC (PEERS) --- */
-
-/* Container chứa các user khác (Quan trọng để JS tính tọa độ đúng) */
+/* --- NGƯỜI DÙNG KHÁC (PEERS) --- */
 #user-orbit-zone {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    z-index: 20;
-    pointer-events: none; /* Để không chặn click vào radar */
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 20; pointer-events: none;
 }
 
-/* Icon người dùng khác */
 .peer-user {
     position: absolute; 
-    width: 80px; /* Rộng hơn để chứa tên dài */
-    height: auto; /* Chiều cao tự động để không cắt chữ */
-    background: transparent; /* Nền trong suốt */
-    border: none;
-    border-radius: 0; 
+    width: 80px; height: auto;
+    border-radius: 12px; 
     cursor: pointer;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    transition: 0.3s; 
-    z-index: 25;
-    box-shadow: none;
-    overflow: visible; /* Cho phép chữ hiện ra ngoài */
+    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+    z-index: 25; pointer-events: auto;
+    
+    /* Căn giữa tâm của element vào điểm tọa độ */
+    transform: translate(-50%, -50%); 
 }
 
-/* Tạo vòng tròn bao quanh icon */
 .peer-icon { 
-    width: 50px; height: 50px; /* Kích thước vòng tròn */
-    font-size: 24px; margin-bottom: 5px; 
+    width: 56px; height: 56px;
+    font-size: 26px; margin-bottom: 8px; 
     background: var(--bg-surface);
-    border: 2px solid var(--text-sub);
+    border: 2px solid var(--border);
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: var(--shadow-md);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     transition: 0.3s;
 }
 
-/* Style cho tên người dùng */
+/* Tên người dùng kiểu "Tag" */
 .peer-user span {
-    font-size: 11px; 
-    color: var(--text-main); 
-    font-weight: bold;
-    background: rgba(255, 255, 255, 0.7); /* Nền mờ giúp chữ dễ đọc hơn */
-    padding: 2px 6px;
-    border-radius: 8px;
-    max-width: 100%;
-    white-space: nowrap; 
-    overflow: hidden; 
-    text-overflow: ellipsis;
-    backdrop-filter: blur(2px);
+    font-size: 12px; color: var(--text-main); font-weight: 600;
+    background: var(--bg-surface);
+    padding: 4px 10px; border-radius: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    white-space: nowrap; max-width: 100px; 
+    overflow: hidden; text-overflow: ellipsis;
+    border: 1px solid var(--border);
 }
-[data-theme="dark"] .peer-user span { background: rgba(0, 0, 0, 0.6); }
 
-/* Hiệu ứng Hover tác động vào vòng tròn bên trong */
+/* Hover Effect */
+.peer-user:hover { z-index: 30; }
 .peer-user:hover .peer-icon {
     border-color: var(--primary); 
-    transform: scale(1.1);
-    box-shadow: 0 0 15px var(--primary);
+    background: var(--primary); color: white;
+    transform: scale(1.15) rotate(5deg);
+    box-shadow: 0 8px 20px rgba(26, 115, 232, 0.4);
+}
+.peer-user:hover span {
+    color: var(--primary); border-color: var(--primary);
 }
 
 .peer-user.drag-over .peer-icon {
-    background: var(--hover-bg); transform: scale(1.2); border-color: #00ac47;
+    background: #00ac47; border-color: #00ac47; color: white;
+    transform: scale(1.3);
 }
 
-/* Xóa style hover cũ của container để tránh xung đột */
-.peer-user:hover { box-shadow: none; border: none; transform: none; }
-
-/* Status Text */
+/* --- TRẠNG THÁI & PANEL --- */
 .drop-status {
-    font-family: monospace; color: var(--text-sub);
-    background: var(--bg-surface); padding: 8px 16px;
-    border-radius: 20px; border: 1px solid var(--border);
-    text-align: center;
+    font-family: 'Courier New', monospace; 
+    color: var(--text-sub); font-size: 14px;
+    background: var(--bg-surface); padding: 10px 24px;
+    border-radius: 30px; border: 1px solid var(--border);
+    text-align: center; box-shadow: var(--shadow-sm);
+    display: inline-block;
 }
 
-/* Mobile Responsive */
-@media (max-width: 600px) {
-    .radar-zone { width: 280px; height: 280px; }
-    @keyframes radarPulse {
-        100% { width: 280px; height: 280px; opacity: 0; }
-    }
-}
-
-/* PEER USERS (Người dùng khác) */
-.peer-user {
-    position: absolute; width: 60px; height: 60px;
-    background: var(--bg-surface); border: 2px solid var(--text-sub);
-    border-radius: 50%; cursor: pointer;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    font-size: 10px; color: var(--text-main); font-weight: bold;
-    transition: 0.3s; z-index: 5;
-    box-shadow: var(--shadow-md);
-    overflow: hidden;
-}
-
-.peer-user:hover {
-    border-color: var(--primary); transform: scale(1.1);
-    box-shadow: 0 0 15px var(--primary);
-}
-.peer-user.drag-over {
-    background: var(--hover-bg); transform: scale(1.2); border-color: #00ac47;
-}
-
-.peer-icon { font-size: 20px; margin-bottom: 2px; }
-
-/* Status Text */
-.drop-status {
-    font-family: monospace; color: var(--text-sub);
-    background: var(--bg-surface); padding: 8px 16px;
-    border-radius: 20px; border: 1px solid var(--border);
-}
-
-/* Mobile Responsive */
-@media (max-width: 600px) {
-    .radar-zone { width: 280px; height: 280px; }
-    @keyframes radarPulse {
-        100% { width: 280px; height: 280px; opacity: 0; }
-    }
-}
-
-/* --- BỔ SUNG CSS CÒN THIẾU --- */
-#user-orbit-zone {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 20; /* Nằm đè lên radar để click được */
-    pointer-events: none; /* Để không chặn click vào các thành phần dưới nếu rỗng */
-}
-
-/* Cho phép click vào icon người dùng */
-.peer-user {
-    pointer-events: auto; 
-}
-
-/* --- UI TIẾN TRÌNH CHUYỂN FILE (WIND DROP) --- */
+/* Transfer Panel (Giữ nguyên logic cũ, chỉ chỉnh lại cho đẹp) */
 #transfer-panel {
-    width: 100%; max-width: 400px;
+    width: 100%; max-width: 420px;
     background: var(--bg-surface);
     border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    margin-top: 20px;
-    box-shadow: var(--shadow-lg);
-    animation: slideUpFade 0.3s ease-out;
+    border-radius: 16px; padding: 24px;
+    margin-top: 30px;
+    box-shadow: 0 20px 40px -10px rgba(0,0,0,0.15);
+    animation: slideUpFade 0.4s ease-out;
 }
 
-.transfer-info {
-    display: flex; align-items: center; gap: 15px; margin-bottom: 15px;
+/* --- MOBILE RESPONSIVE (QUAN TRỌNG) --- */
+@media (max-width: 600px) {
+    .drop-header h1 { font-size: 1.8rem; }
+    .drop-header p { font-size: 14px; padding: 0 20px; }
+    
+    /* Thu nhỏ radar để vừa màn hình điện thoại */
+    .radar-zone { width: 300px; height: 300px; margin-bottom: 20px; }
+    
+    /* Thu nhỏ nút trung tâm */
+    .my-device-center { width: 70px; height: 70px; font-size: 14px; }
+    
+    /* Điều chỉnh animation sóng */
+    @keyframes radarWave {
+        0% { width: 70px; height: 70px; opacity: 0.6; border-width: 3px; }
+        100% { width: 100%; height: 100%; opacity: 0; border-width: 0px; }
+    }
+
+    .peer-user { width: 70px; }
+    .peer-icon { width: 48px; height: 48px; font-size: 20px; }
+    .peer-user span { font-size: 11px; padding: 3px 8px; }
+    
+    /* Đẩy Panel lên cao chút */
+    #transfer-panel { 
+        position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+        width: 90%; z-index: 100; margin: 0;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.3);
+    }
 }
 
-.tf-icon { font-size: 24px; }
-
-.tf-details {
-    display: flex; flex-direction: column; flex: 1; overflow: hidden;
-}
-
-#tf-filename {
-    font-weight: bold; font-size: 14px;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-
-#tf-status { font-size: 12px; color: var(--text-sub); }
-
-.progress-track {
-    width: 100%; height: 8px; background: var(--border);
-    border-radius: 4px; overflow: hidden; margin-bottom: 15px;
-}
-
-.progress-fill {
-    width: 0%; height: 100%; background: var(--primary);
-    transition: width 0.2s linear; /* Chuyển động mượt */
-}
-
-.btn-cancel-transfer {
-    width: 100%; padding: 10px;
-    background: transparent; border: 1px solid var(--danger);
-    color: var(--danger); border-radius: 8px; cursor: pointer;
-    font-size: 13px; font-weight: bold; transition: 0.2s;
-}
-.btn-cancel-transfer:hover {
-    background: var(--danger); color: white;
+/* Thêm vào cuối file style.css */
+@media (max-width: 600px) {
+    /* Giới hạn độ dài tên trên mobile để không bị tràn */
+    .peer-user span {
+        max-width: 70px; /* Giới hạn chiều rộng tên */
+        font-size: 10px; /* Chữ nhỏ lại chút */
+        padding: 2px 6px;
+    }
+    
+    /* Đẩy tên nằm sát lên icon hơn */
+    .peer-icon { margin-bottom: 4px; }
 }
