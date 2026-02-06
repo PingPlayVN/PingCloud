@@ -191,68 +191,85 @@ function uploadFileP2P(file, targetPeerId) {
 
 async function sendFileInChunks(file, conn, receiverType) {
     let offset = 0;
-    const CHUNK = 64 * 1024;
-    let chunkCounter = 0;
+    const CHUNK = 64 * 1024; // Chunk 64KB (Kích thước chuẩn tối ưu cho PeerJS)
     let lastUpdateTime = 0;
 
-    // CẤU HÌNH TỐC ĐỘ (Quan trọng)
-    let maxBufferThreshold; 
-    let throttleInterval;   
-    let sleepTime;          
+    // 1. Cấu hình High Water Mark (Ngưỡng tràn bộ nhớ đệm)
+    // Tăng giới hạn bộ đệm lên cao hơn để tận dụng tốc độ mạng LAN/Wifi 5GHz
+    let highWaterMark = 16 * 1024 * 1024; // PC: 16MB buffer
 
-    if (myDeviceType === 'pc') {
-        if (receiverType === 'pc') {
-            maxBufferThreshold = 8 * 1024 * 1024; 
-            throttleInterval = 100; sleepTime = 1;
-        } else {
-            maxBufferThreshold = 2 * 1024 * 1024; 
-            throttleInterval = 10; sleepTime = 20;
+    if (myDeviceType === 'mobile' || receiverType === 'mobile') {
+        // Mobile bộ nhớ ít hơn, giảm buffer xuống để tránh crash trình duyệt
+        highWaterMark = 16 * 1024 * 1024; // Mobile: 8MB buffer
+    }
+
+    // Thiết lập ngưỡng thấp: Khi buffer giảm xuống mức này, sự kiện sẽ được kích hoạt để gửi tiếp
+    try {
+        if (conn.dataChannel) {
+            conn.dataChannel.bufferedAmountLowThreshold = 65536; // 64KB
         }
-    } else {
-        if (receiverType === 'pc') {
-            maxBufferThreshold = 8 * 1024 * 1024; 
-            throttleInterval = 200; sleepTime = 1;
-        } else {
-            maxBufferThreshold = 6 * 1024 * 1024; 
-            throttleInterval = 100; sleepTime = 2;
-        }
+    } catch (e) {
+        console.warn("Trình duyệt không hỗ trợ bufferedAmountLowThreshold", e);
     }
 
     try {
         while (offset < file.size) {
-            if(!isTransferring || !conn.open) break;
-            
-            if (conn.dataChannel.bufferedAmount > maxBufferThreshold) {
-                 await new Promise(r => setTimeout(r, 5)); 
-                 continue;
+            // Kiểm tra xem người dùng có hủy hoặc mất kết nối không
+            if (!isTransferring || !conn.open) break;
+
+            // 2. BACKPRESSURE CONTROL (Kiểm soát tốc độ thông minh)
+            // Nếu hàng đợi đang đầy quá ngưỡng, dừng lại chờ nó vơi bớt
+            if (conn.dataChannel.bufferedAmount > highWaterMark) {
+                await new Promise(resolve => {
+                    const onLow = () => {
+                        conn.dataChannel.removeEventListener('bufferedamountlow', onLow);
+                        resolve();
+                    };
+                    conn.dataChannel.addEventListener('bufferedamountlow', onLow);
+                    
+                    // Fallback an toàn: Nếu mạng bị lag và sự kiện không nổ sau 1s, tự động check lại
+                    // Giúp tránh tình trạng treo tiến trình mãi mãi
+                    setTimeout(() => {
+                        conn.dataChannel.removeEventListener('bufferedamountlow', onLow);
+                        resolve();
+                    }, 800); 
+                });
             }
 
+            // 3. Đọc file và Gửi
             const slice = file.slice(offset, offset + CHUNK);
             const buffer = await slice.arrayBuffer();
             
-            conn.send({ type: 'chunk', data: buffer });
-            offset += CHUNK;
-            chunkCounter++;
-            
-            if (throttleInterval > 0 && chunkCounter % throttleInterval === 0) {
-                await new Promise(r => setTimeout(r, sleepTime)); 
+            try {
+                conn.send({ type: 'chunk', data: buffer });
+            } catch (err) {
+                console.warn("Lỗi gửi chunk (có thể do mất kết nối):", err);
+                break;
             }
 
+            offset += CHUNK;
+
+            // 4. Cập nhật UI (Throttle)
+            // Chỉ cập nhật UI mỗi 100ms để dành CPU cho việc gửi file
             const now = Date.now();
-            if (now - lastUpdateTime > 100 || offset === file.size) {
+            if (now - lastUpdateTime > 100 || offset >= file.size) {
                 const percent = (offset / file.size) * 100;
                 updateTransferUI(percent, 'Đang gửi...');
                 lastUpdateTime = now;
+                
+                // QUAN TRỌNG: Nhường 1 chút thời gian (0ms) cho Main Thread vẽ lại UI
+                // Giúp thanh tiến trình mượt mà, không bị đơ trình duyệt
+                await new Promise(r => setTimeout(r, 0));
             }
         }
-        
+
         if (isTransferring) {
             window.showToast("✅ Gửi hoàn tất!");
             resetTransferState();
         }
-    } catch(e) {
-        console.error(e);
-        window.showToast("Lỗi khi gửi file");
+    } catch (e) {
+        console.error("Transfer Error:", e);
+        window.showToast("Lỗi truyền tải file: " + e.message);
         resetTransferState();
     }
 }
