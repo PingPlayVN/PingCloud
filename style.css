@@ -1400,3 +1400,20 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; bo
     /* Đẩy tên nằm sát lên icon hơn */
     .peer-icon { margin-bottom: 4px; }
 }
+
+/* Skeleton Loading Animation */
+.skeleton {
+    background: #e0e0e0;
+    border-radius: 12px;
+    animation: skeleton-loading 1s linear infinite alternate;
+}
+[data-theme="dark"] .skeleton { background: #2d2e30; }
+
+@keyframes skeleton-loading {
+    0% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+.card.skeleton-card { pointer-events: none; }
+.card.skeleton-card .thumb-box { background: transparent; }
+.card.skeleton-card .card-footer { background: transparent; }
