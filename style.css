@@ -1417,3 +1417,69 @@ input[type="color"]::-webkit-color-swatch { border: none; border-radius: 50%; bo
 .card.skeleton-card { pointer-events: none; }
 .card.skeleton-card .thumb-box { background: transparent; }
 .card.skeleton-card .card-footer { background: transparent; }
+
+/* Scrollbar đẹp hơn */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { 
+    background: #c1c1c1; 
+    border-radius: 4px; 
+}
+::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+[data-theme="dark"] ::-webkit-scrollbar-thumb { background: #555; }
+[data-theme="dark"] ::-webkit-scrollbar-thumb:hover { background: #777; }
+
+.nav-btn {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    background: rgba(0,0,0,0.5); color: white; border: none;
+    width: 40px; height: 40px; border-radius: 50%;
+    cursor: pointer; z-index: 20; font-size: 18px;
+    display: flex; align-items: center; justify-content: center;
+    transition: 0.2s;
+}
+.nav-btn:hover { background: rgba(255,255,255,0.2); }
+.nav-btn.prev { left: 10px; }
+.nav-btn.next { right: 10px; }
+
+/* --- FIX LỖI ẢNH DỌC TRÀN MÀN HÌNH --- */
+
+/* 1. Khi xem ảnh, Container tự co giãn theo nội dung thay vì fix cứng */
+.modal-content.view-image .media-window {
+    width: auto;       /* Chiều rộng tự động theo ảnh */
+    max-width: 95vw;   /* Không quá 95% chiều rộng màn hình */
+    max-height: 95vh;  /* QUAN TRỌNG: Giới hạn chiều cao popup là 95% màn hình */
+    display: inline-flex; /* Ôm sát nội dung */
+}
+
+/* 2. Bỏ tỉ lệ 16:9 của Video, chuyển sang tự động */
+.modal-content.view-image .media-body {
+    aspect-ratio: auto !important; /* Bắt buộc bỏ tỉ lệ 16/9 */
+    width: auto;
+    height: auto;
+    background: transparent; /* Bỏ nền đen thừa */
+    display: block; /* Để ảnh chiếm khối */
+}
+
+/* 3. Giới hạn kích thước ảnh thật sự */
+.modal-content.view-image .media-content {
+    display: block;
+    width: auto;
+    height: auto;
+    
+    /* Tính toán: 95vh (popup) - 50px (header) = khoảng 85vh cho ảnh */
+    max-height: 85vh; 
+    max-width: 100%;
+    object-fit: contain; /* Đảm bảo ảnh không bị méo */
+}
+
+/* Mobile: Vẫn giữ full chiều rộng để dễ nhìn hơn */
+@media (max-width: 768px) {
+    .modal-content.view-image .media-window {
+        width: 100%;
+        max-height: 100vh;
+    }
+    .modal-content.view-image .media-content {
+        max-height: 80vh;
+    }
+}
