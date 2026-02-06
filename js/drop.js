@@ -148,12 +148,15 @@ function uploadFileP2P(file, targetPeerId) {
     
     const conn = myPeer.connect(targetPeerId, { reliable: true });
     
+    // [FIX 1] Gán activeConnection để nút Hủy hoạt động phía người gửi
+    activeConnection = conn;
+
     conn.on('open', () => {
         const safeType = file.type || 'application/octet-stream';
-        // QUAN TRỌNG: Đợi 500ms để kết nối ổn định trước khi gửi yêu cầu
-        // Giúp tránh việc máy khách chưa kịp lắng nghe sự kiện
         setTimeout(() => {
-            conn.send({ type: 'meta', fileName: file.name, fileSize: file.size, fileType: safeType });
+            if (conn.open) {
+                conn.send({ type: 'meta', fileName: file.name, fileSize: file.size, fileType: safeType });
+            }
         }, 500); 
     });
 
@@ -162,12 +165,26 @@ function uploadFileP2P(file, targetPeerId) {
             isTransferring = true;
             document.getElementById('transfer-panel').style.display = 'block';
             
-            // Lấy loại thiết bị đích để tối ưu gói tin
             const receiverType = response.deviceType || 'mobile';
             sendFileInChunks(file, conn, receiverType);
-        } else if (response.type === 'busy') {
+        } 
+        else if (response.type === 'busy') {
             window.showToast("Người nhận đang bận!");
             conn.close();
+        }
+        // [FIX 2] Xử lý khi người nhận bấm Hủy
+        else if (response.type === 'cancel') {
+            window.showToast("⛔ Người nhận đã từ chối/hủy chuyển tệp!");
+            isTransferring = false; // Ngắt vòng lặp gửi chunk
+            resetTransferState();
+            setTimeout(() => conn.close(), 500); // Đóng kết nối sau khi xử lý xong
+        }
+    });
+
+    conn.on('close', () => {
+        if (isTransferring) {
+            window.showToast("Mất kết nối với người nhận!");
+            resetTransferState();
         }
     });
 }
@@ -241,17 +258,21 @@ async function sendFileInChunks(file, conn, receiverType) {
 }
 
 function setupIncomingConnection(conn) {
+    // [FIX 3] Gán activeConnection ngay khi có người kết nối tới
+    activeConnection = conn;
+
     conn.on('data', (data) => {
         if(data.type === 'meta') {
             window.incomingMeta = data;
             
-            // Gọi Explicit window.showActionModal để đảm bảo tìm thấy hàm
             window.showActionModal({
                 title: "Nhận file?",
                 desc: `Bạn có muốn nhận file "${data.fileName}" (${formatSize(data.fileSize)}) không?`,
                 type: 'confirm',
                 onConfirm: () => {
                     isTransferring = true;
+                    // Gán lại lần nữa cho chắc chắn khi bắt đầu nhận
+                    activeConnection = conn; 
                     conn.send({ type: 'ack', status: 'ok', deviceType: myDeviceType });
                     
                     document.getElementById('transfer-panel').style.display = 'block';
@@ -262,6 +283,9 @@ function setupIncomingConnection(conn) {
             });
             
         } else if (data.type === 'chunk') {
+            // Nếu đã bị hủy thì không nhận thêm
+            if (!isTransferring) return; 
+
             incomingChunks.push(data.data);
             receivedSize += data.data.byteLength;
             
@@ -281,7 +305,16 @@ function setupIncomingConnection(conn) {
                 window.showToast("Đã tải xong!");
             }
         } else if (data.type === 'cancel') {
-            window.showToast("Người gửi đã hủy");
+            // [FIX 4] Xử lý khi người gửi bấm Hủy
+            window.showToast("⛔ Người gửi đã hủy chuyển tệp.");
+            resetTransferState();
+        }
+    });
+
+    conn.on('close', () => {
+        if (isTransferring) {
+            // Chỉ thông báo lỗi nếu đang chuyển mà bị ngắt, 
+            // còn nếu đã xong hoặc đã hủy thì bỏ qua
             resetTransferState();
         }
     });
@@ -307,4 +340,38 @@ function formatSize(bytes) {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+window.cancelTransfer = function() {
+    if (!isTransferring && !activeConnection) {
+        resetTransferState();
+        return;
+    }
+
+    // 1. Ngắt trạng thái ngay lập tức để vòng lặp sendFileInChunks dừng lại
+    isTransferring = false; 
+
+    // 2. Gửi tín hiệu hủy cho đối phương
+    if (activeConnection && activeConnection.open) {
+        try {
+            console.log("Đang gửi lệnh hủy...");
+            activeConnection.send({ type: 'cancel' });
+        } catch (err) {
+            console.warn("Lỗi gửi lệnh hủy:", err);
+        }
+    }
+    
+    window.showToast("⛔ Đã hủy chuyển tệp.");
+    resetTransferState();
+
+    // 3. Đợi 1 chút cho tin nhắn đi rồi mới đóng kết nối
+    if (activeConnection) {
+        const connToClose = activeConnection;
+        setTimeout(() => { 
+            if(connToClose) {
+                connToClose.close(); 
+            }
+            activeConnection = null;
+        }, 800); 
+    }
 }
