@@ -190,76 +190,98 @@ function uploadFileP2P(file, targetPeerId) {
     });
 }
 
+// --- THUẬT TOÁN ADAPTIVE CHUNKING ---
 async function sendFileInChunks(file, conn, receiverType) {
     let offset = 0;
-    const CHUNK = 64 * 1024; // Chunk 64KB (Kích thước chuẩn tối ưu cho PeerJS)
+    
+    // Cấu hình thuật toán thích ứng
+    let chunkSize = 64 * 1024; // Khởi điểm: 64KB
+    const MAX_CHUNK_SIZE = 1024 * 1024; // Tối đa: 1MB (Tăng tốc độ mạng LAN)
+    const MIN_CHUNK_SIZE = 16 * 1024;   // Tối thiểu: 16KB (Cho mạng yếu)
+    
+    // Cấu hình bộ đệm (Backpressure)
+    // Mobile RAM yếu nên giữ buffer thấp hơn PC
+    const MAX_BUFFERED_AMOUNT = (receiverType === 'mobile' || myDeviceType === 'mobile') 
+        ? 8 * 1024 * 1024  // 8MB cho Mobile
+        : 16 * 1024 * 1024; // 16MB cho PC
+
     let lastUpdateTime = 0;
+    let lastChunkDuration = 0;
 
-    // 1. Cấu hình High Water Mark (Ngưỡng tràn bộ nhớ đệm)
-    // Tăng giới hạn bộ đệm lên cao hơn để tận dụng tốc độ mạng LAN/Wifi 5GHz
-    let highWaterMark = 16 * 1024 * 1024; // PC: 16MB buffer
-
-    if (myDeviceType === 'mobile' || receiverType === 'mobile') {
-        // Mobile bộ nhớ ít hơn, giảm buffer xuống để tránh crash trình duyệt
-        highWaterMark = 16 * 1024 * 1024; // Mobile: 8MB buffer
-    }
-
-    // Thiết lập ngưỡng thấp: Khi buffer giảm xuống mức này, sự kiện sẽ được kích hoạt để gửi tiếp
+    // Thiết lập ngưỡng báo động thấp cho WebRTC
     try {
         if (conn.dataChannel) {
             conn.dataChannel.bufferedAmountLowThreshold = 65536; // 64KB
         }
-    } catch (e) {
-        console.warn("Trình duyệt không hỗ trợ bufferedAmountLowThreshold", e);
-    }
+    } catch (e) { console.warn("Browser not support bufferedAmountLowThreshold"); }
 
     try {
+        const fileReader = new FileReader(); // Dùng FileReader tái sử dụng để giảm GC (Garbage Collection)
+
         while (offset < file.size) {
-            // Kiểm tra xem người dùng có hủy hoặc mất kết nối không
             if (!isTransferring || !conn.open) break;
 
-            // 2. BACKPRESSURE CONTROL (Kiểm soát tốc độ thông minh)
-            // Nếu hàng đợi đang đầy quá ngưỡng, dừng lại chờ nó vơi bớt
-            if (conn.dataChannel.bufferedAmount > highWaterMark) {
+            // 1. BACKPRESSURE: Kiểm soát dòng chảy
+            // Nếu "ống nước" đang đầy, hãy chờ nó rút bớt nước
+            if (conn.dataChannel.bufferedAmount > MAX_BUFFERED_AMOUNT) {
                 await new Promise(resolve => {
                     const onLow = () => {
                         conn.dataChannel.removeEventListener('bufferedamountlow', onLow);
                         resolve();
                     };
                     conn.dataChannel.addEventListener('bufferedamountlow', onLow);
-                    
-                    // Fallback an toàn: Nếu mạng bị lag và sự kiện không nổ sau 1s, tự động check lại
-                    // Giúp tránh tình trạng treo tiến trình mãi mãi
+                    // Fallback: Nếu mạng lag không báo event, tự check lại sau 500ms
                     setTimeout(() => {
                         conn.dataChannel.removeEventListener('bufferedamountlow', onLow);
                         resolve();
-                    }, 800); 
+                    }, 500);
                 });
             }
 
-            // 3. Đọc file và Gửi
-            const slice = file.slice(offset, offset + CHUNK);
+            // 2. CHUẨN BỊ DỮ LIỆU
+            const chunkStartTime = Date.now();
+            const slice = file.slice(offset, offset + chunkSize);
             const buffer = await slice.arrayBuffer();
-            
+
+            // 3. GỬI DỮ LIỆU
             try {
                 conn.send({ type: 'chunk', data: buffer });
             } catch (err) {
-                console.warn("Lỗi gửi chunk (có thể do mất kết nối):", err);
-                break;
+                console.warn("Lỗi gửi chunk, thử lại...", err);
+                // Nếu lỗi, giảm ngay size gói tin và thử lại vòng sau (không tăng offset)
+                chunkSize = Math.max(MIN_CHUNK_SIZE, chunkSize / 2);
+                await new Promise(r => setTimeout(r, 500)); // Nghỉ 1 chút
+                continue; 
             }
 
-            offset += CHUNK;
+            // 4. THUẬT TOÁN THÍCH ỨNG (ADAPTIVE LOGIC)
+            const chunkEndTime = Date.now();
+            const duration = chunkEndTime - chunkStartTime;
 
-            // 4. Cập nhật UI (Throttle)
-            // Chỉ cập nhật UI mỗi 100ms để dành CPU cho việc gửi file
-            const now = Date.now();
-            if (now - lastUpdateTime > 100 || offset >= file.size) {
+            // Nếu gửi quá nhanh (< 50ms) -> Mạng tốt -> Tăng size để gửi được nhiều hơn
+            if (duration < 50 && chunkSize < MAX_CHUNK_SIZE) {
+                chunkSize *= 2; 
+                // console.log("🚀 Tăng tốc độ: Gói tin lên " + chunkSize/1024 + "KB");
+            }
+            // Nếu gửi quá chậm (> 200ms) -> Mạng nghẽn -> Giảm size để gói tin đi mượt hơn
+            else if (duration > 200 && chunkSize > MIN_CHUNK_SIZE) {
+                chunkSize = Math.ceil(chunkSize / 2);
+                // console.log("🐢 Mạng chậm: Giảm gói tin xuống " + chunkSize/1024 + "KB");
+            }
+
+            // 5. CẬP NHẬT TIẾN TRÌNH
+            offset += buffer.byteLength; // Dùng byteLength thực tế
+            
+            // Chỉ update UI mỗi 100ms để đỡ lag Main Thread
+            if (chunkEndTime - lastUpdateTime > 100 || offset >= file.size) {
                 const percent = (offset / file.size) * 100;
-                updateTransferUI(percent, 'Đang gửi...');
-                lastUpdateTime = now;
+                // Tính tốc độ truyền (MB/s) - Optional
+                // const speed = (chunkSize / duration) * 1000 / 1024 / 1024; 
                 
-                // QUAN TRỌNG: Nhường 1 chút thời gian (0ms) cho Main Thread vẽ lại UI
-                // Giúp thanh tiến trình mượt mà, không bị đơ trình duyệt
+                updateTransferUI(percent, `Đang gửi...`); 
+                lastUpdateTime = chunkEndTime;
+                
+                // Nhường thread cho UI vẽ lại (quan trọng)
                 await new Promise(r => setTimeout(r, 0));
             }
         }
@@ -269,8 +291,8 @@ async function sendFileInChunks(file, conn, receiverType) {
             resetTransferState();
         }
     } catch (e) {
-        console.error("Transfer Error:", e);
-        window.showToast("Lỗi truyền tải file: " + e.message);
+        console.error("Transfer Critical Error:", e);
+        window.showToast("Lỗi truyền tải: " + e.message);
         resetTransferState();
     }
 }
