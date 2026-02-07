@@ -1,6 +1,6 @@
 // sw.js - Service Worker
 
-const CACHE_NAME = 'wind-share-v2.3'; // Đổi tên này nếu bạn update code để ép trình duyệt tải lại
+const CACHE_NAME = 'wind-share-v2.4'; // Đổi tên này nếu bạn update code để ép trình duyệt tải lại
 const ASSETS_TO_CACHE = [
     './',
     './index.html',
@@ -59,4 +59,5 @@ self.addEventListener('fetch', (e) => {
     );
 
 });
+
 
