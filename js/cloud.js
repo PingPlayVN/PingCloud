@@ -529,7 +529,14 @@ function openMedia(id, type, title) {
                 ${navBtns}
                 ${type === 'image' 
                     ? `<img src="https://drive.google.com/thumbnail?id=${id}&sz=w2000" class="media-content loaded">`
-                    : `<iframe src="https://drive.google.com/file/d/${id}/preview" class="media-content loaded" allow="autoplay; fullscreen" allowfullscreen="true" webkitallowfullscreen="true" mozallowfullscreen="true"></iframe>`
+                    : `<iframe 
+    		           src="https://drive.google.com/file/d/${id}/preview" 
+    			   class="media-content loaded" 
+    			   allow="autoplay; fullscreen; encrypted-media; picture-in-picture" 
+    			   allowfullscreen 
+    			   webkitallowfullscreen 
+    			   mozallowfullscreen>
+		       </iframe>`
                 }
             </div>
         </div>
