@@ -474,43 +474,28 @@ window.openContextItem = function() {
 }
 
 // --- MEDIA MODAL ---
-// 1. Hàm đóng Media: Xóa sạch nội dung để ngắt tiếng Video
 window.closeMedia = function() {
     const modal = document.getElementById('mediaModal');
     const content = document.getElementById('modalContent');
     
     if (modal) modal.style.display = 'none';
     
-    // QUAN TRỌNG: Xóa nội dung để ngắt kết nối iframe (dừng tiếng video)
-    // và giải phóng bộ nhớ cho ảnh/tài liệu.
+    // Xóa nội dung để ngắt kết nối iframe (dừng tiếng video)
     if (content) {
         setTimeout(() => {
             content.innerHTML = ''; 
             content.className = 'modal-content'; // Reset class
-        }, 100); // Delay nhẹ để UI tắt mượt hơn
+        }, 100); 
     }
 }
 
-// 2. Xử lý đóng khi click vào vùng đen bên ngoài (Background)
-document.addEventListener('DOMContentLoaded', () => {
-    const modal = document.getElementById('mediaModal');
-    if (modal) {
-        modal.addEventListener('click', function(e) {
-            // Chỉ đóng khi click vào vùng đen (modal), không đóng khi click vào nội dung
-            if (e.target === this) {
-                window.closeMedia();
-            }
-        });
-    }
-});
-
-// 3. Cập nhật lại hàm openMedia để dùng nút đóng mới
+// 2. Hàm mở Media (Giữ nguyên logic cũ)
 function openMedia(id, type, title) {
     const currentIndex = processedData.findIndex(item => item.id === id);
     const modal = document.getElementById('mediaModal');
     const content = document.getElementById('modalContent');
     
-    // Reset nội dung cũ trước khi mở cái mới
+    // Reset nội dung cũ
     content.innerHTML = '';
     content.className = 'modal-content'; 
     
@@ -519,7 +504,7 @@ function openMedia(id, type, title) {
 
     modal.style.display = 'flex';
     
-    // Logic nút Next/Prev (Giữ nguyên)
+    // Logic nút Next/Prev
     let navBtns = '';
     if (type === 'image' && currentIndex !== -1) {
         const prevItem = processedData[currentIndex - 1];
@@ -533,8 +518,7 @@ function openMedia(id, type, title) {
         }
     }
 
-    // Render HTML
-    // [FIX]: Nút X (btn-close-media) giờ gọi hàm closeMedia() thay vì ẩn tay
+    // Render HTML - Nút X gọi hàm closeMedia()
     content.innerHTML = `
         <div class="media-window">
             <div class="media-header">
