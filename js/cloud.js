@@ -474,22 +474,52 @@ window.openContextItem = function() {
 }
 
 // --- MEDIA MODAL ---
-function openMedia(id, type, title) {
-    // Tìm vị trí hiện tại của item trong danh sách đã lọc
-    const currentIndex = processedData.findIndex(item => item.id === id);
-    
+// 1. Hàm đóng Media: Xóa sạch nội dung để ngắt tiếng Video
+window.closeMedia = function() {
     const modal = document.getElementById('mediaModal');
     const content = document.getElementById('modalContent');
+    
+    if (modal) modal.style.display = 'none';
+    
+    // QUAN TRỌNG: Xóa nội dung để ngắt kết nối iframe (dừng tiếng video)
+    // và giải phóng bộ nhớ cho ảnh/tài liệu.
+    if (content) {
+        setTimeout(() => {
+            content.innerHTML = ''; 
+            content.className = 'modal-content'; // Reset class
+        }, 100); // Delay nhẹ để UI tắt mượt hơn
+    }
+}
+
+// 2. Xử lý đóng khi click vào vùng đen bên ngoài (Background)
+document.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('mediaModal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            // Chỉ đóng khi click vào vùng đen (modal), không đóng khi click vào nội dung
+            if (e.target === this) {
+                window.closeMedia();
+            }
+        });
+    }
+});
+
+// 3. Cập nhật lại hàm openMedia để dùng nút đóng mới
+function openMedia(id, type, title) {
+    const currentIndex = processedData.findIndex(item => item.id === id);
+    const modal = document.getElementById('mediaModal');
+    const content = document.getElementById('modalContent');
+    
+    // Reset nội dung cũ trước khi mở cái mới
     content.innerHTML = '';
     content.className = 'modal-content'; 
     
-    // --- [THÊM MỚI] Xử lý class riêng cho từng loại file ---
     if (type === 'doc') content.classList.add('view-doc');
     if (type === 'image') content.classList.add('view-image');
 
     modal.style.display = 'flex';
     
-    // Nút Next/Prev Logic
+    // Logic nút Next/Prev (Giữ nguyên)
     let navBtns = '';
     if (type === 'image' && currentIndex !== -1) {
         const prevItem = processedData[currentIndex - 1];
@@ -503,11 +533,13 @@ function openMedia(id, type, title) {
         }
     }
 
+    // Render HTML
+    // [FIX]: Nút X (btn-close-media) giờ gọi hàm closeMedia() thay vì ẩn tay
     content.innerHTML = `
         <div class="media-window">
             <div class="media-header">
                 <h3 class="media-title">${title}</h3>
-                <button class="btn-close-media" onclick="document.getElementById('mediaModal').style.display='none'">✕</button>
+                <button class="btn-close-media" onclick="closeMedia()">✕</button>
             </div>
             <div class="media-body">
                 ${navBtns}
