@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
+    <title>WindHouse - Tank Battle (Online Update)</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+<div id="rotateOverlay">
+    <div class="rotate-icon">↻</div>
+    <h2>VUI LÒNG XOAY NGANG ĐIỆN THOẠI</h2>
+    <p>PLEASE ROTATE YOUR DEVICE</p>
+</div>
+
+<div id="gameWrapper">
+    <!-- Back to Wind Game button (external handler loaded from root) -->
+    <div style="position: fixed; top: 10px; left: 10px; z-index: 9999; background: rgba(0,0,0,0.85); padding: 10px; border-radius: 8px; display: flex; align-items: center;" id="backButton">
+        <button onclick="exitToWindGame()" style="background: linear-gradient(135deg, #d32f2f, #b71c1c); color: white; border: 2px solid #ff6b6b; padding: 10px 16px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; transition: all 0.2s; box-shadow: 0 4px 8px rgba(211, 47, 47, 0.3);">EXIT</button>
+    </div>
+    
+    <div id="canvasContainer">
+        <canvas id="bgCanvas" width="1365" height="780" class="game-layer"></canvas>
+        <canvas id="gameCanvas" width="1365" height="780" class="game-layer"></canvas>
+    </div>
+    
+    <div id="gameMessage" class="game-msg">DRAW!</div>
+    
+    <div id="deviceSelectModal">
+        <h1 style="margin-bottom: 40px;">SELECT CONTROL METHOD</h1>
+        <div style="display: flex;">
+            <div class="device-option" onclick="window.selectDevice('pc')">
+                <div class="device-icon">⌨️</div>
+                <div class="device-label">PC / Keyboard</div>
+            </div>
+            <div class="device-option" onclick="window.selectDevice('mobile')">
+                <div class="device-icon">📱</div>
+                <div class="device-label">Mobile / 2 Players</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="mapSelectModal">
+        <h2 style="color:#fff; margin-bottom: 30px;">SELECT BATTLEFIELD</h2>
+        
+        <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+            <div class="map-card day" onclick="window.selectMap('day')">
+                <div class="map-icon">☀️</div>
+                <div class="map-title">ONE SHOT</div>
+                <div class="map-desc">Daylight. 1 Hit Kill.<br>Classic Mode.</div>
+            </div>
+
+            <div class="map-card night" onclick="window.selectMap('night')">
+                <div class="map-icon">🔦</div>
+                <div class="map-title">NIGHT OPS</div>
+                <div class="map-desc">Darkness. 1 Hit Kill.<br>Tactical Vision.</div>
+            </div>
+
+            <div class="map-card dm" onclick="window.selectMap('dm')">
+                <div class="map-icon">❤️</div> <div class="map-title">DEATHMATCH</div>
+                <div class="map-desc">100 HP Battle.<br>Damage System.</div>
+            </div>
+        </div>
+        
+        <button class="menu-btn" style="margin-top:30px; width: 150px;" onclick="window.closeMapSelect()">BACK</button>
+    </div>
+
+    <div id="menuOverlay">
+        <div class="main-title-box"><span class="title-prefix">WindHouse</span><h1 class="game-title">Tank Battle</h1></div>
+        <div class="controls-container">
+            <div class="player-card-ui p1">
+                <div class="p-label">PLAYER 1</div>
+                <canvas id="previewP1" width="140" height="140" class="tank-preview"></canvas>
+                <div class="ctrl-row">Move <span class="key-cap">↑</span><span class="key-cap">↓</span><span class="key-cap">←</span><span class="key-cap">→</span></div>
+                <div class="ctrl-row">Fire <span class="key-cap" style="min-width:60px;">K</span></div>
+            </div>
+            <div class="player-card-ui p2">
+                <div class="p-label">PLAYER 2</div>
+                <canvas id="previewP2" width="140" height="140" class="tank-preview"></canvas>
+                <div class="ctrl-row">Move <span class="key-cap">E</span><span class="key-cap">D</span><span class="key-cap">S</span><span class="key-cap">F</span></div>
+                <div class="ctrl-row">Fire <span class="key-cap" style="min-width:60px;">Q</span></div>
+            </div>
+        </div>
+        <div class="btn-group">
+            <button class="btn-main btn-start" onclick="window.showModeSelect()">START MISSION</button>
+            <button class="btn-main btn-guide" onclick="window.openGuide()">ARMORY</button>
+        </div>
+        <div style="margin-top: 40px; font-size: 10px; color: #555; font-weight: bold; letter-spacing: 1px; text-transform: uppercase;">
+            [F] Fullscreen | v69.0 (Online Beta)
+        </div>
+    </div>
+
+    <div id="mobileControls">
+        <div class="control-set p1-set">
+            <div class="fire-btn" id="btnFireP1">FIRE</div>
+            <div class="touch-zone" id="joyP1">
+                <div class="stick-knob" id="knobP1"></div>
+            </div>
+        </div>
+
+        <div class="control-set p2-set">
+            <div class="fire-btn" id="btnFireP2">FIRE</div>
+            <div class="touch-zone" id="joyP2">
+                <div class="stick-knob" id="knobP2"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modeSelectModal">
+        <h2 style="color:#fff; margin-bottom: 20px;">SELECT GAME MODE</h2>
+        
+        <button class="mode-btn pvp" onclick="window.selectMode('pvp')">
+            <span>2 PLAYER (PvP)</span><div class="mode-desc">Duel with a friend (Offline)</div>
+        </button>
+        
+        <button class="mode-btn" onclick="window.openOnlineMenu()" style="border-left: 5px solid #9c27b0;">
+            <span>ONLINE (BETA)</span><div class="mode-desc">Play via Internet</div>
+        </button>
+
+        <button class="mode-btn pve" onclick="window.selectMode('pve')">
+            <span>PLAYER vs BOT</span><div class="mode-desc">Training against AI</div>
+        </button>
+        
+        <button class="menu-btn" style="margin-top:20px; width: 150px;" onclick="window.closeModeSelect()">BACK</button>
+    </div>
+
+    <div id="onlineModal" style="display: none;">
+        <h2 style="color:#fff; margin-bottom: 20px;">ONLINE MULTIPLAYER</h2>
+        
+        <div class="online-section" id="hostSection">
+    <p style="color:#aaa; font-size:12px;">CREATE ROOM ID (MAX 10 CHARS):</p>
+    
+    <div id="createRoomInputArea">
+        <input type="text" id="customHostId" placeholder="ENTER ID" maxlength="10" class="room-input" style="font-size: 20px; padding: 10px;">
+        <button class="menu-btn" onclick="window.createCustomRoom()">CREATE ROOM</button>
+    </div>
+
+    <div id="createdRoomDisplay" style="display: none;">
+        <div class="room-id-box" id="myRoomId" onclick="navigator.clipboard.writeText(this.innerText); alert('Copied ID!')" title="Click to Copy">...</div>
+        <div style="color: #66bb6a; font-size: 11px; margin-top: 5px; display:none;" id="hostStatus">WAITING FOR PLAYER...</div>
+    </div>
+</div>
+
+        <div style="width: 100%; height: 1px; background: #333; margin: 20px 0;"></div>
+
+        <div class="online-section" id="joinSection">
+            <input type="text" id="joinInput" placeholder="ENTER ROOM ID" class="room-input">
+            <button class="menu-btn" onclick="window.joinRoom()">JOIN ROOM</button>
+        </div>
+
+        <button class="menu-btn" style="margin-top:20px; width: 150px; background:#333;" onclick="window.closeOnlineMenu()">BACK</button>
+    </div>
+
+    <div id="guideModal">
+        <h2>WEAPON GUIDE</h2>
+        <div class="guide-content"></div>
+        <button class="menu-btn" style="margin-top:20px; width: 150px; background:#333;" onclick="window.closeGuide()">BACK</button>
+    </div>
+
+    <div id="settingsModal">
+        <div class="pause-title">PAUSED</div>
+        <div class="pause-layout">
+            <div class="pause-panel system">
+                <div class="panel-header">SYSTEM</div>
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <button class="menu-btn primary" onclick="window.closeSettings()">RESUME</button>
+                    <button class="menu-btn" onclick="window.restartMatch()">RESTART</button>
+                    <button class="menu-btn" onclick="window.quitToMenu()">EXIT MENU</button>
+                </div>
+            </div>
+            <div class="pause-panel settings" id="mainSettingsPanel"></div>
+            <div class="pause-panel controls" id="controlsPanelContent"></div>
+        </div>
+    </div>
+
+    <div id="bottomBar">
+        <div class="player-hud p2-hud">
+            <div class="hud-inner">
+                <div class="hud-info" style="align-items: flex-end;">
+                    <div class="hud-name" id="p2NameUI">RED PLAYER</div>
+                    <div class="hp-track" style="opacity: 0;">
+                        <div class="hp-fill p2-fill" id="hp-p2"></div>
+                    </div>
+                    <div class="hud-score" id="s2">0</div>
+                </div>
+                <div class="hud-ammo-box p2-ammo" id="ammo-p2"></div>
+            </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; z-index: 2;">
+            <div style="font-size: 9px; color:#aaa; letter-spacing: 2px; font-weight: bold; margin-bottom: 2px;">TACTICAL SYSTEM</div>
+            <button class="tac-btn" onclick="window.openSettings()">MENU / CONFIG</button>
+        </div>
+
+        <div class="player-hud p1-hud">
+            <div class="hud-inner">
+                <div class="hud-info">
+                    <div class="hud-name">GREEN PLAYER</div>
+                    <div class="hp-track" style="opacity: 0;">
+                        <div class="hp-fill p1-fill" id="hp-p1"></div>
+                    </div>
+                    <div class="hud-score" id="s1">0</div>
+                </div>
+                <div class="hud-ammo-box p1-ammo" id="ammo-p1"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Load core game scripts -->
+<script src="js/constants.js"></script>
+<script src="js/classes.js"></script>
+<script src="js/interface.js"></script>
+<script src="js/network.js"></script>
+<script src="js/game.js"></script>
+
+<!-- External exit handler kept at site root so game folder can be updated independently -->
+<script src="../../js/game-exit.js"></script>
+
+</body>
+</html>
