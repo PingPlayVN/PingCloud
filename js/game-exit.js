@@ -18,4 +18,4 @@ function exitToWindGame() {
     }
 }
 
-console.log('game-exit.js loaded');
+// debug log removed for production

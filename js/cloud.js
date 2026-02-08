@@ -380,9 +380,12 @@ window.renameItemUI = function() {
         type: 'prompt',
         initialValue: item.title,
         onConfirm: (newName) => {
-            if (newName && newName !== item.title) {
-                db.ref('videos/' + contextTargetId).update({ title: newName });
-            }
+            const clean = normalizeName(newName);
+            if (!clean) return window.showToast('Tên không hợp lệ');
+            if (clean === item.title) return;
+            // ensure unique among siblings
+            const unique = generateUniqueName(clean, item.parentId);
+            db.ref('videos/' + contextTargetId).update({ title: unique });
         }
     });
 }
@@ -395,30 +398,123 @@ window.createFolderUI = function() {
         type: 'prompt',
         initialValue: "Thư mục mới",
         onConfirm: (name) => {
-            if (name) {
-                db.ref('videos').push({
-                    title: name,
-                    type: 'folder',
-                    tabCategory: currentTab,
-                    parentId: window.currentFolderId,
-                    timestamp: firebase.database.ServerValue.TIMESTAMP
-                });
-            }
+            const clean = normalizeName(name) || 'Thư mục mới';
+            const unique = generateUniqueName(clean, window.currentFolderId);
+            db.ref('videos').push({
+                title: unique,
+                type: 'folder',
+                tabCategory: currentTab,
+                parentId: window.currentFolderId,
+                timestamp: firebase.database.ServerValue.TIMESTAMP
+            });
         }
     });
 }
 
 // Helpers
 function getDescendantIds(targetId) {
-    let ids = [];
-    const children = allData.filter(item => item.parentId === targetId);
-    children.forEach(child => {
-        ids.push(child.key);
-        if (child.type === 'folder') {
-            ids = ids.concat(getDescendantIds(child.key));
-        }
-    });
+    // Protect against cycles by tracking visited nodes
+    const ids = [];
+    const visited = new Set();
+    (function recurse(id) {
+        if (!id || visited.has(id)) return;
+        visited.add(id);
+        const children = allData.filter(item => item.parentId === id);
+        children.forEach(child => {
+            ids.push(child.key);
+            if (child.type === 'folder') recurse(child.key);
+        });
+    })(targetId);
     return ids;
+}
+
+// --- HELPERS: name sanitization, unique name, deep copy ---
+function normalizeName(name) {
+    if (!name) return '';
+    // Trim, remove control characters, limit length
+    let s = name.toString().trim().replace(/[\u0000-\u001F\u007F]/g, '');
+    if (s.length > 200) s = s.slice(0, 200);
+    return s;
+}
+
+function generateUniqueName(baseName, parentId) {
+    baseName = normalizeName(baseName) || 'Untitled';
+    const siblings = allData.filter(i => (i.parentId || null) === (parentId || null)).map(i => i.title);
+    if (!siblings.includes(baseName)) return baseName;
+    // Try suffixes: (copy), (copy 2), ... (use lowercase 'copy' per project convention)
+    const copyTag = ' (copy)';
+    if (!siblings.includes(baseName + copyTag)) return baseName + copyTag;
+    let n = 2;
+    while (n < 1000) {
+        const candidate = baseName + ` (copy ${n})`;
+        if (!siblings.includes(candidate)) return candidate;
+        n++;
+    }
+    return baseName + ` ${Date.now()}`;
+}
+
+async function deepCopyFolder(sourceId, targetParentId) {
+    // Build a quick lookup of nodes by id
+    const mapById = {};
+    allData.forEach(item => { mapById[item.key] = item; });
+
+    // Collect all descendant ids (including source)
+    const nodesToCopy = [];
+    const q = [sourceId];
+    const seen = new Set();
+    while (q.length) {
+        const id = q.shift();
+        if (!id || seen.has(id)) continue;
+        seen.add(id);
+        const node = mapById[id];
+        if (!node) continue;
+        nodesToCopy.push(node);
+        allData.filter(i => i.parentId === id).forEach(child => q.push(child.key));
+    }
+
+    // Process nodes only when their new parent exists -> ensure parent created before children
+    const idMap = {};
+    const remaining = nodesToCopy.slice();
+    const topSource = mapById[sourceId];
+    const newTopName = generateUniqueName(topSource.title || 'Folder', targetParentId);
+
+    let iterations = 0;
+    while (remaining.length) {
+        iterations++;
+        if (iterations > 5000) throw new Error('deepCopyFolder: too many iterations');
+        let progress = false;
+        for (let i = 0; i < remaining.length; ) {
+            const node = remaining[i];
+            const isTop = node.key === sourceId;
+            const parentId = node.parentId;
+            const parentResolved = isTop || (parentId && idMap[parentId]);
+            if (!parentResolved && !isTop) { i++; continue; }
+
+            // Prepare new object
+            const newObj = Object.assign({}, node);
+            delete newObj.key;
+            const newParentId = isTop ? (targetParentId || null) : (idMap[parentId] || parentId || null);
+            newObj.parentId = newParentId;
+            const desiredTitle = isTop ? newTopName : (newObj.title || 'Untitled');
+            newObj.title = generateUniqueName(normalizeName(desiredTitle), newParentId);
+            newObj.timestamp = firebase.database.ServerValue.TIMESTAMP;
+
+            // Push and map
+            // eslint-disable-next-line no-await-in-loop
+            const ref = await db.ref('videos').push(newObj);
+            idMap[node.key] = ref.key;
+
+            // remove processed
+            remaining.splice(i, 1);
+            progress = true;
+        }
+        if (!progress) {
+            // Shouldn't happen; break to avoid infinite loop
+            break;
+        }
+    }
+
+    return idMap;
 }
 
 window.copyItem = function() {
@@ -436,10 +532,17 @@ window.cutItem = function() {
 window.pasteItem = function() {
     if (!window.isAdmin) return window.showToast("Cần quyền Admin!");
     if (!window.appClipboard.id) return window.showToast("Chưa có gì để dán!");
-    if (window.appClipboard.id === window.currentFolderId) return window.showToast("Không thể dán vào chính nó!");
+    const sourceId = window.appClipboard.id;
+    if (sourceId === window.currentFolderId) return window.showToast("Không thể dán vào chính nó!");
 
-    const sourceItem = dataMap[window.appClipboard.id];
+    const sourceItem = dataMap[sourceId];
     if (!sourceItem) return;
+
+    // Prevent pasting into a descendant (would create a cycle)
+    const descendants = getDescendantIds(sourceId);
+    if (window.currentFolderId && (descendants.includes(window.currentFolderId) || window.currentFolderId === sourceId)) {
+        return window.showToast("Không thể dán vào thư mục con của chính nó!");
+    }
 
     const updates = {
         parentId: window.currentFolderId,
@@ -449,15 +552,41 @@ window.pasteItem = function() {
     else updates.type = currentTab;
 
     if (window.appClipboard.action === 'cut') {
-        db.ref('videos/' + window.appClipboard.id).update(updates)
+        // Moving: simple update (already exists) but prevent cycles
+        db.ref('videos/' + sourceId).update(updates)
             .then(() => {
                 window.showToast("Đã di chuyển");
-                window.appClipboard = { action: null, id: null }; 
+                window.appClipboard = { action: null, id: null };
             });
     } else if (window.appClipboard.action === 'copy') {
-        const newItem = { ...sourceItem, ...updates, title: sourceItem.title + " (Copy)" };
-        delete newItem.key; 
-        db.ref('videos').push(newItem).then(() => window.showToast("Đã dán bản sao"));
+        // Deep-copy if folder, else simple copy
+        if (sourceItem.type === 'folder') {
+            // Recursively clone folder and children
+            function cloneNode(oldId, newParentId) {
+                const node = dataMap[oldId];
+                if (!node) return Promise.resolve();
+                const newNode = { ...node };
+                delete newNode.key;
+                newNode.parentId = newParentId;
+                newNode.timestamp = firebase.database.ServerValue.TIMESTAMP;
+                // Ensure correct tab/type for new parent
+                if (node.type === 'folder') newNode.tabCategory = currentTab;
+                else newNode.type = currentTab;
+
+                return db.ref('videos').push(newNode).then(ref => {
+                    const newId = ref.key;
+                    // Find children and clone them
+                    const children = allData.filter(item => item.parentId === oldId);
+                    return Promise.all(children.map(child => cloneNode(child.key, newId)));
+                });
+            }
+
+            cloneNode(sourceId, window.currentFolderId).then(() => window.showToast('Đã dán bản sao'));
+        } else {
+            const newItem = { ...sourceItem, ...updates, title: (sourceItem.title || '') + " (Copy)" };
+            delete newItem.key;
+            db.ref('videos').push(newItem).then(() => window.showToast("Đã dán bản sao"));
+        }
     }
 }
 
@@ -478,28 +607,51 @@ window.closeMedia = function() {
     const modal = document.getElementById('mediaModal');
     const content = document.getElementById('modalContent');
     
-    if (modal) modal.style.display = 'none';
-    
-    // Xóa nội dung để ngắt kết nối iframe (dừng tiếng video)
-    if (content) {
-        setTimeout(() => {
-            content.innerHTML = ''; 
-            content.className = 'modal-content'; // Reset class
-        }, 100); 
-    }
-}
+    const sourceItem = dataMap[window.appClipboard.id];
+    if (!sourceItem) return;
 
-// 2. Hàm mở Media (Giữ nguyên logic cũ)
-function openMedia(id, type, title) {
-    const currentIndex = processedData.findIndex(item => item.id === id);
-    const modal = document.getElementById('mediaModal');
-    const content = document.getElementById('modalContent');
-    
-    // Reset nội dung cũ
-    content.innerHTML = '';
-    content.className = 'modal-content'; 
-    
-    if (type === 'doc') content.classList.add('view-doc');
+    // Prevent pasting into a descendant of source (would create cycle)
+    if (sourceItem.type === 'folder') {
+        const descendants = getDescendantIds(sourceItem.key);
+        if (descendants.includes(window.currentFolderId)) return window.showToast("Không thể dán vào thư mục con của chính nó!");
+    }
+
+    // CUT: simple update
+    if (window.appClipboard.action === 'cut') {
+        const updates = {
+            parentId: window.currentFolderId,
+            timestamp: firebase.database.ServerValue.TIMESTAMP
+        };
+        if (sourceItem.type === 'folder') updates.tabCategory = currentTab;
+        else updates.type = currentTab;
+        return db.ref('videos/' + window.appClipboard.id).update(updates)
+            .then(() => {
+                window.showToast("Đã di chuyển");
+                window.appClipboard = { action: null, id: null };
+            }).catch(err => window.showToast("Lỗi khi di chuyển"));
+    }
+
+    // COPY: handle files and folders
+    if (window.appClipboard.action === 'copy') {
+        if (sourceItem.type === 'folder') {
+            // deep copy entire folder tree under currentFolderId
+            deepCopyFolder(sourceItem.key, window.currentFolderId)
+                .then(() => window.showToast("Đã dán thư mục (bản sao)"))
+                .catch(() => window.showToast("Lỗi khi dán thư mục"));
+        } else {
+            // file copy: duplicate entry with unique name
+            const newTitle = generateUniqueName(sourceItem.title || 'File', window.currentFolderId);
+            const newItem = Object.assign({}, sourceItem, {
+                title: newTitle,
+                parentId: window.currentFolderId,
+                timestamp: firebase.database.ServerValue.TIMESTAMP,
+                type: currentTab
+            });
+            delete newItem.key;
+            db.ref('videos').push(newItem).then(() => window.showToast("Đã dán bản sao"))
+                .catch(() => window.showToast("Lỗi khi dán"));
+        }
+    }
     if (type === 'image') content.classList.add('view-image');
 
     modal.style.display = 'flex';
@@ -586,4 +738,14 @@ window.handleSearch = function(val) {
         currentSearchTerm = val.toLowerCase().trim();
         updateDataPipeline();
     }, 300);
+}
+
+// --- NAMES / SANITIZE HELPERS ---
+function sanitizeName(name) {
+    if (!name && name !== 0) return '';
+    name = String(name).trim();
+    // Remove control chars and some filesystem-special chars
+    name = name.replace(/[\x00-\x1F<>:\/\\|?*"']/g, '');
+    if (name.length > 100) name = name.slice(0, 100);
+    return name;
 }

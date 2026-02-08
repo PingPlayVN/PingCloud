@@ -7,6 +7,10 @@ function updatePaletteSystem() {
     if(!baseHexInput) return;
     
     const baseHex = baseHexInput.value;
+    if (!isValidHex(baseHex)) {
+        showToast('Mã màu không hợp lệ');
+        return;
+    }
     const rule = document.getElementById('harmonyRule').value;
     
     const hexDisplay = document.getElementById('baseColorHex');
@@ -62,12 +66,15 @@ function renderPalette(hslArray) {
         strip.className = 'color-strip';
         strip.style.backgroundColor = hex;
         strip.onclick = () => copyColor(hex);
-        
+
         let name = index === 2 && hslArray.length === 5 ? "Base" : `Color ${index+1}`;
         if (document.getElementById('harmonyRule').value === 'monochromatic') name = `Lightness ${Math.round(hsl[2])}%`;
 
+        // choose readable label color based on luminance
+        const labelColor = getReadableTextColor(hex);
+
         strip.innerHTML = `
-            <div class="strip-info">
+            <div class="strip-info" style="color: ${labelColor}">
                 <span class="strip-hex">${hex}</span>
                 <span class="strip-name">${name}</span>
             </div>
@@ -79,7 +86,7 @@ function renderPalette(hslArray) {
 function copyColor(hex) {
     navigator.clipboard.writeText(hex).then(() => {
         showToast(`Đã copy màu: ${hex} 📋`);
-    });
+    }).catch(err => showToast('Không thể copy màu: ' + (err && err.message ? err.message : '')));
 }
 
 function randomBaseColor() {
@@ -93,8 +100,44 @@ function exportPalette() {
         const text = currentPaletteHex.join(', ');
         navigator.clipboard.writeText(text).then(() => {
             showToast("Đã copy toàn bộ mã màu! 📋");
-        });
+        }).catch(err => showToast('Không thể copy: ' + (err && err.message ? err.message : '')));
     }
+}
+
+// Export palette as JSON file
+function exportPaletteJSON() {
+    if (currentPaletteHex.length === 0) return showToast('Không có bảng màu để xuất');
+    const payload = {
+        createdAt: new Date().toISOString(),
+        base: document.getElementById('baseColorInput') ? document.getElementById('baseColorInput').value : null,
+        rule: document.getElementById('harmonyRule') ? document.getElementById('harmonyRule').value : null,
+        colors: currentPaletteHex
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `palette-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast('Đã tải file JSON');
+}
+
+// --- Helpers for validation and contrast ---
+function isValidHex(h) {
+    return /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(h);
+}
+
+function getReadableTextColor(hex) {
+    // compute luminance, return '#000' or '#fff'
+    if (!isValidHex(hex)) return '#000';
+    const r = parseInt(hex.substr(1,2),16);
+    const g = parseInt(hex.substr(3,2),16);
+    const b = parseInt(hex.substr(5,2),16);
+    const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+    return lum > 0.6 ? '#000' : '#fff';
 }
 
 // --- MATH HELPERS ---

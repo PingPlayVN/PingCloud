@@ -39,7 +39,6 @@
                 <div class="game-desc">${escapeHtml(g.desc)}</div>
                 <div class="game-actions">
                     <button class="btn-play" onclick="launchGame('${g.url}')">Chơi Ngay</button>
-                    <button class="btn-play secondary" onclick="openGameNewTab('${g.url}')">Tab Mới</button>
                 </div>`;
             // open on card click as well
             card.onclick = (ev) => {
@@ -66,10 +65,7 @@
         }
     }
 
-    // Open game in new tab
-    window.openGameNewTab = function(url) {
-        window.open(url, '_blank');
-    }
+    // (removed open-in-new-tab button — games launch in current context)
 
 
 
