@@ -462,6 +462,15 @@ async function uploadFileP2P(file, targetPeerId) {
     console.log('📤 [Sender] Starting upload to', targetPeerId, 'file:', file.name, file.size);
     window.showToast(`🔗 Đang kết nối tới ${targetPeerId}...`);
     
+    // ✅ Generate encryption key IMMEDIATELY (quick operation)
+    const sharedKey = await generateSharedKey(file.name, file.size);
+    const encKey = await deriveEncryptionKey(sharedKey);
+    const iv = generateIV();
+    
+    // ✅ START CHECKSUM CALCULATION IN PARALLEL (don't block connection)
+    let checksumPromise = calculateFileChecksum(file);
+    
+    // ✅ CREATE CONNECTION IMMEDIATELY (don't wait for checksum)
     const conn = myPeer.connect(targetPeerId, { reliable: true });
     activeConnection = conn;
     console.log('📤 [Sender] Created connection, initial state:', {
@@ -470,12 +479,6 @@ async function uploadFileP2P(file, targetPeerId) {
         open: conn.open,
         dataChannel: conn.dataChannel ? conn.dataChannel.readyState : 'none'
     });
-    
-    // ✅ Generate checksum & encryption key
-    const checksum = await calculateFileChecksum(file);
-    const sharedKey = await generateSharedKey(file.name, file.size);
-    const encKey = await deriveEncryptionKey(sharedKey);
-    const iv = generateIV();
 
     conn.on('error', (err) => {
         console.error('❌ [Sender] Connection error:', err);
@@ -487,10 +490,11 @@ async function uploadFileP2P(file, targetPeerId) {
         console.log('⛔ [Sender] Connection closed');
     });
 
-    // ✅ Connection timeout: if not open after 5s, show error and allow retry
+    // ✅ FASTER TIMEOUT ON MOBILE (3s) for quicker feedback on slow networks
+    const timeoutDuration = isMyDeviceMobile ? 3000 : 5000;
     let connectionTimeout = setTimeout(() => {
         if (!conn.open && !metadataSent) {
-            console.warn('⚠️ [Sender] Connection timeout after 5s, state:', {
+            console.warn('⚠️ [Sender] Connection timeout after ' + timeoutDuration + 'ms, state:', {
                 open: conn.open,
                 dataChannel: conn.dataChannel ? conn.dataChannel.readyState : 'none'
             });
@@ -499,7 +503,7 @@ async function uploadFileP2P(file, targetPeerId) {
             // Retry connection after brief delay
             setTimeout(() => uploadFileP2P(file, targetPeerId), 500);
         }
-    }, 5000);
+    }, timeoutDuration);
 
     conn.on('open', () => {
         console.log('✅ [Sender] Connection OPEN! DataChannel state:', conn.dataChannel?.readyState);
@@ -515,10 +519,21 @@ async function uploadFileP2P(file, targetPeerId) {
     }, 20);
 
     let metadataSent = false;
-    function sendMetadata() {
+    async function sendMetadata() {
         if (metadataSent) return;
         metadataSent = true;
         clearTimeout(connectionTimeout); // ✅ Cancel retry timeout since connection succeeded
+        
+        // ✅ Wait for checksum if not ready yet (but don't block connection)
+        let checksum = null;
+        console.log('📤 [Sender] Waiting for checksum calculation...');
+        try {
+            checksum = await checksumPromise;
+            console.log('✅ [Sender] Checksum ready:', checksum?.substring(0, 8) + '...');
+        } catch (e) {
+            console.warn('⚠️ Checksum calculation failed, sending without:', e);
+        }
+        
         const safeType = file.type || 'application/octet-stream';
         console.log('📤 [Sender] Sending metadata:', file.name, file.size);
         conn.send({ 
