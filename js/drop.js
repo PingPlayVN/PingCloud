@@ -35,6 +35,8 @@ let transferTimeoutId = null;
 let lastChunkTime = 0;
 let transferWatchdogInterval = null;
 let progressUpdateInterval = null;  // ✅ UI update timer for smooth progress display
+let connectionStartTime = null;  // ✅ Track connection start time
+let connectionUpdateInterval = null;  // ✅ Update connection UI timer
 
 // ✅ TRANSFER QUEUE untuk múltiple files
 let transferQueue = [];
@@ -462,6 +464,32 @@ async function uploadFileP2P(file, targetPeerId) {
     console.log('📤 [Sender] Starting upload to', targetPeerId, 'file:', file.name, file.size);
     window.showToast(`🔗 Đang kết nối tới ${targetPeerId}...`);
     
+    // ✅ Show connection status bar
+    const connStatusEl = document.getElementById('connectionStatus');
+    const connStatusText = document.getElementById('connStatusText');
+    const connTimeEl = document.getElementById('connTime');
+    const connBar = document.getElementById('connBar');
+    
+    if (connStatusEl) {
+        connStatusEl.style.display = 'block';
+        connStatusText.innerText = '🔗 Đang kết nối...';
+        connBar.style.width = '0%';
+    }
+    
+    // ✅ Start connection timer
+    connectionStartTime = Date.now();
+    if (connectionUpdateInterval) clearInterval(connectionUpdateInterval);
+    connectionUpdateInterval = setInterval(() => {
+        const elapsed = (Date.now() - connectionStartTime) / 1000;
+        if (connTimeEl) {
+            connTimeEl.innerText = elapsed.toFixed(1) + 's';
+            // Animate progress bar (max 100% after timeout duration)
+            const timeoutDuration = isMyDeviceMobile ? 3 : 5;
+            const progress = Math.min((elapsed / timeoutDuration) * 100, 95);
+            if (connBar) connBar.style.width = progress + '%';
+        }
+    }, 100);
+    
     // ✅ Generate encryption key IMMEDIATELY (quick operation)
     const sharedKey = await generateSharedKey(file.name, file.size);
     const encKey = await deriveEncryptionKey(sharedKey);
@@ -483,6 +511,7 @@ async function uploadFileP2P(file, targetPeerId) {
     conn.on('error', (err) => {
         console.error('❌ [Sender] Connection error:', err);
         window.showToast("❌ Lỗi kết nối: " + err.message);
+        hideConnectionStatus();
         resetTransferState();
     });
 
@@ -500,6 +529,7 @@ async function uploadFileP2P(file, targetPeerId) {
             });
             window.showToast('⏳ Kết nối chậm, đang thử lại...');
             conn.close();
+            hideConnectionStatus();
             // Retry connection after brief delay
             setTimeout(() => uploadFileP2P(file, targetPeerId), 500);
         }
@@ -507,6 +537,13 @@ async function uploadFileP2P(file, targetPeerId) {
 
     conn.on('open', () => {
         console.log('✅ [Sender] Connection OPEN! DataChannel state:', conn.dataChannel?.readyState);
+        // ✅ Update connection status to success
+        if (connStatusText) {
+            connStatusText.innerText = '✅ Kết nối thành công!';
+            if (connBar) connBar.style.width = '100%';
+        }
+        // Hide after 800ms
+        setTimeout(() => hideConnectionStatus(), 800);
         sendMetadata();
     });
 
@@ -514,6 +551,11 @@ async function uploadFileP2P(file, targetPeerId) {
     setTimeout(() => {
         if (conn.open && !metadataSent) {
             console.log('⚡ [Sender] Connection was already open, sending metadata now');
+            if (connStatusText) {
+                connStatusText.innerText = '✅ Kết nối thành công!';
+                if (connBar) connBar.style.width = '100%';
+            }
+            setTimeout(() => hideConnectionStatus(), 800);
             sendMetadata();
         }
     }, 20);
@@ -1017,6 +1059,21 @@ function formatBytes(bytes) {
     return bytes + ' B';
 }
 
+// ✅ Hide connection status bar
+function hideConnectionStatus() {
+    if (connectionUpdateInterval) {
+        clearInterval(connectionUpdateInterval);
+        connectionUpdateInterval = null;
+    }
+    const connStatusEl = document.getElementById('connectionStatus');
+    if (connStatusEl) {
+        setTimeout(() => {
+            connStatusEl.style.display = 'none';
+        }, 500);
+    }
+    connectionStartTime = null;
+}
+
 function resetTransferState() {
     isTransferring = false;
     activeConnection = null;
@@ -1037,9 +1094,17 @@ function resetTransferState() {
         clearInterval(progressUpdateInterval);
         progressUpdateInterval = null;
     }
+    if (connectionUpdateInterval) {
+        clearInterval(connectionUpdateInterval);
+        connectionUpdateInterval = null;
+    }
     
     const panel = document.getElementById('transfer-panel');
     if(panel) panel.style.display = 'none';
+    
+    // Hide connection status bar
+    const connStatusEl = document.getElementById('connectionStatus');
+    if (connStatusEl) connStatusEl.style.display = 'none';
 }
 
 function formatSize(bytes) {

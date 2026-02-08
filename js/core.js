@@ -209,7 +209,7 @@ window.switchApp = function(appName) {
     const menuItems = document.querySelectorAll('.sidebar-menu .menu-item');
     menuItems.forEach(item => item.classList.remove('active'));
 
-    ['app-cloud', 'app-palette', 'app-drop'].forEach(id => {
+    ['app-cloud', 'app-palette', 'app-drop', 'app-windgame'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
@@ -231,6 +231,14 @@ window.switchApp = function(appName) {
         document.title = "Wind Cloud - Wind Drop";
         if(typeof initWindDrop === 'function') initWindDrop();
     }
+    else if (appName === 'windgame') {
+        // mark the clicked menu item active (by attribute match)
+        const el = document.querySelector(`.sidebar-menu .menu-item[onclick="switchApp('windgame')"]`);
+        if (el) el.classList.add('active');
+        document.getElementById('app-windgame').style.display = 'block';
+        document.title = "Wind Cloud - Wind Game";
+        if (typeof initWindGame === 'function') initWindGame();
+    }
 }
 
 window.toggleTheme = function() {
@@ -248,6 +256,72 @@ if (savedTheme === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
     const cb = document.getElementById('theme-checkbox');
     if(cb) cb.checked = true;
+}
+
+// --- AUTO-RESTORE WIND GAME TAB ON RETURN FROM GAME ---
+function checkAndRestoreWindGame() {
+    // Check 1: Hash parameter from game EXIT
+    const hash = window.location.hash;
+    if (hash === '#windgame') {
+        console.log('Hash #windgame detected - restoring Wind Game tab');
+        // Clear hash
+        window.history.replaceState({}, document.title, window.location.pathname);
+        // Use setTimeout to ensure all elements are rendered
+        setTimeout(() => {
+            window.goToWindGameTab();
+        }, 50);
+        return;
+    }
+    
+    // Check 2: sessionStorage flag (backup)
+    const shouldReturnToWindGame = sessionStorage.getItem('returnToWindGame');
+    if (shouldReturnToWindGame === 'true') {
+        console.log('sessionStorage flag detected - restoring Wind Game tab');
+        sessionStorage.removeItem('returnToWindGame');
+        // Use setTimeout to ensure all elements are rendered
+        setTimeout(() => {
+            window.goToWindGameTab();
+        }, 50);
+    }
+}
+
+// Check on DOMContentLoaded
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', checkAndRestoreWindGame);
+} else {
+    // DOM already loaded
+    checkAndRestoreWindGame();
+}
+
+// Also check on page visibility (for bfcache scenario)
+window.addEventListener('pageshow', checkAndRestoreWindGame);
+window.goToWindGameTab = function() {
+    console.log('goToWindGameTab() called - switching to Wind Game tab...');
+    // Clear query parameters to avoid loops
+    window.history.replaceState({}, document.title, window.location.pathname);
+    // Switch to windgame app - but skip toggleSidebar to prevent flickering
+    const menuItems = document.querySelectorAll('.sidebar-menu .menu-item');
+    menuItems.forEach(item => item.classList.remove('active'));
+
+    ['app-cloud', 'app-palette', 'app-drop', 'app-windgame'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = 'none';
+    });
+
+    // Mark windgame as active
+    const el = document.querySelector(`.sidebar-menu .menu-item[onclick="switchApp('windgame')"]`);
+    if (el) el.classList.add('active');
+    
+    // Show windgame app
+    document.getElementById('app-windgame').style.display = 'block';
+    document.title = "Wind Cloud - Wind Game";
+    
+    // Initialize windgame
+    if (typeof initWindGame === 'function') {
+        initWindGame();
+    }
+    
+    console.log('Wind Game tab is now active');
 }
 
 // --- 7. PWA REGISTRATION ---
